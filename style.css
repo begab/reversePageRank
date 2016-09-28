@@ -1,0 +1,30 @@
+node {
+  z-index: 0;
+  text-alignment: under;
+}
+
+node.big {
+  fill-color: red, white;
+  fill-mode: dyn-plain;
+  size-mode: dyn-size;
+}
+
+node.small {
+  fill-color: blue, white;
+  fill-mode: dyn-plain;
+  size-mode: dyn-size;
+}
+
+sprite {
+  fill-color: rgba(255,255,255,0);
+  size-mode: dyn-size;
+  stroke-mode: plain;
+  stroke-color: black;
+  stroke-width: 2px;
+}
+
+edge {
+  shape: line;
+  size-mode: dyn-size;
+  arrow-size: 3px, 2px;
+}
