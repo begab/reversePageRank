@@ -6,10 +6,11 @@ import java.io.PrintWriter;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Map;
-import java.util.Random;
-
-import org.apache.commons.math3.random.JDKRandomGenerator;
+import java.util.PriorityQueue;
+import java.util.Set;
 
 import hu.u_szeged.utils.Utils;
 
@@ -19,7 +20,6 @@ public class OwnGraph implements Serializable, Cloneable {
    * 
    */
   private static final long serialVersionUID = -2201356524637857822L;
-  public static Random RANDOM = new JDKRandomGenerator();
 
   private int numOfNodes;
   private int numOfEdges;
@@ -81,7 +81,7 @@ public class OwnGraph implements Serializable, Cloneable {
   }
 
   public enum WeightingStrategy {
-    UNIFORM, DEGREE_BASED, EXACT, RAND
+    UNIFORM, DEGREE_BASED, INVERSE_DEGREE_BASED, EXACT, RAND
   }
 
   public OwnGraph copyGraph(WeightingStrategy weightStrat) {
@@ -100,16 +100,12 @@ public class OwnGraph implements Serializable, Cloneable {
     return neighbors[i][0];
   }
 
-  public int getTotalDegree(int i) {
-    return indegrees[i] + neighbors[i][0];
+  public int getOutDegree(int i) {
+    return neighbors[i][0];
   }
 
-  private void setNeighborWeights(int i, double[] ws) {
-    if (ws.length != neighbors[i][0] + 1) {
-      System.err.format("Incompatible lengths encountered during setting the neighborhood of node %d. The program exits now.\n", i);
-      System.exit(1);
-    }
-    weights[i] = ws;
+  public int getTotalDegree(int i) {
+    return indegrees[i] + neighbors[i][0];
   }
 
   /**
@@ -196,47 +192,49 @@ public class OwnGraph implements Serializable, Cloneable {
   /**
    * Reassigns edge weights in the graph based on the values of newWeights.
    * 
-   * @param params
+   * @param newWeights
+   * @param softmax
    */
   public void setWeights(double[] newWeights) {
+    int i = 0;
     if (newWeights.length != numOfEdges) {
       System.err.println("FATAL error: the length of the new parameters should exactly match that of the number of edges in the graph.");
       System.exit(1);
     }
-    int i = 0;
     for (int n = 0; n < numOfNodes; ++n) {
       int[] neighs = neighbors[n];
-      double[] weights = new double[neighs[0] + 1];
+      double[] ws = new double[neighs[0] + 1];
       double sum = 0.0d;
       for (int k = 0; k < neighs[0]; ++k, ++i) {
-        sum += (weights[k + 1] = newWeights[i]);
+        sum += (ws[k + 1] = newWeights[i]);
       }
-      weights[0] = sum;
-      setNeighborWeights(n, weights);
+      ws[0] = sum;
+      weights[n] = ws;
     }
   }
 
   public void initWeights(WeightingStrategy weightStrat) {
     for (int i = 0; i < getNumOfNodes(); ++i) {
       int[] neighs = getOutLinks(i);
-      double[] newWeights = new double[neighs[0] + 1];
       if (weightStrat == WeightingStrategy.RAND) {
-        newWeights = Utils.drawMultinomial(neighs[0], new double[] { 1.0d });
-      } else if (weightStrat == WeightingStrategy.DEGREE_BASED) {
+        weights[i] = Utils.drawMultinomial(neighs[0], new double[] { 1.0d });
+      } else if (weightStrat == WeightingStrategy.DEGREE_BASED || weightStrat == WeightingStrategy.INVERSE_DEGREE_BASED) {
         double[] neighsTotalDegree = new double[neighs[0]];
+        int maxDegree = 0;
         for (int n = 1; n <= neighs[0]; ++n) {
           neighsTotalDegree[n - 1] = getIndegree(neighs[n]) + getNumOfNeighbors(neighs[n]);
+          maxDegree = Math.max(maxDegree, (int) neighsTotalDegree[n - 1]);
         }
-        newWeights = Utils.drawMultinomial(neighs[0], neighsTotalDegree);
+        for (int n = 1; weightStrat == WeightingStrategy.INVERSE_DEGREE_BASED && n <= neighs[0]; ++n) {
+          neighsTotalDegree[n - 1] = maxDegree - neighsTotalDegree[n - 1] + 1;
+        }
+        weights[i] = Utils.drawMultinomial(neighs[0], neighsTotalDegree);
       } else if (weightStrat == WeightingStrategy.UNIFORM) {
-        double sum = 0.0d;
-        for (int n = 1; n <= neighs[0]; ++n) {
-          newWeights[n] = 1.0d / neighs[0];
-          sum += newWeights[n];
+        weights[i] = new double[neighs[0] + 1];
+        for (int n = 0; n <= neighs[0]; ++n) {
+          weights[i][n] = 0.0d;
         }
-        newWeights[0] = sum;
       }
-      setNeighborWeights(i, newWeights);
     }
   }
 
@@ -249,16 +247,12 @@ public class OwnGraph implements Serializable, Cloneable {
     return nodeLabels[n];
   }
 
-  public Integer getNodeIdByLabel(String label) {
-    return lookupForNodeId.get(label);
-  }
-
   public boolean containsNode(String s) {
     return lookupForNodeId.containsKey(s);
   }
 
-  public Integer getNodeNumberForId(String s) {
-    return lookupForNodeId.get(s);
+  public Integer getNodeIdByLabel(String label) {
+    return lookupForNodeId.get(label);
   }
 
   public boolean[] addBidirectionalEdge(int from, int to) {
@@ -350,14 +344,14 @@ public class OwnGraph implements Serializable, Cloneable {
 
   /**
    * This method normalizes the array in place, meaning that the value it stores will be modified.
-   * 
+   *
    * @param w
    * @param length
    */
   public void normalizeWeights(double[] w, int length) {
     double sum = 0.0d;
     for (int j = 1; j <= length; ++j) {
-      sum += (w[j] /= w[0]);
+      sum += (w[j] = w[j] / w[0]);
     }
     if (Double.isNaN(sum)) { // there was a division by 0, i.e. all neighbors had a relative weight of 0
       sum = 0.0d;
@@ -370,29 +364,19 @@ public class OwnGraph implements Serializable, Cloneable {
 
   public void softmaxNormalizeWeights() {
     for (int i = 0; i < numOfNodes; ++i) {
-      softmaxNormalizeWeights(weights[i], getNumOfNeighbors(i));
+      Utils.softmaxNormalize(weights[i], getNumOfNeighbors(i));
+    }
+  }
+
+  public void softmaxDenormalizeWeights() {
+    for (int i = 0; i < numOfNodes; ++i) {
+      Utils.softmaxDenormalize(weights[i], getNumOfNeighbors(i));
     }
   }
 
   /**
-   * This method normalizes the array in place, meaning that the value it stores will be modified.
-   * 
-   * @param w
-   * @param length
-   */
-  public void softmaxNormalizeWeights(double[] w, int length) {
-    double expSum = 0.0d;
-    for (int j = 1; j <= length; ++j) {
-      expSum += (w[j] = Math.exp(w[j]));
-    }
-    w[0] = 0.0d;
-    for (int j = 1; j <= length; ++j) {
-      w[0] += (w[j] /= expSum);
-    }
-  }
-
-  /**
-   * This method should be called once a graph is believed not to change. It frees memory that is not storing anything useful when invoked.
+   * This method should be called once a graph is believed not to change. <br/>
+   * When invoked the method frees up memory that is not storing anything useful, which could be useful before serialization of a graph happens.
    */
   public void finalizeGraph() {
     for (int i = 0; i < numOfNodes; ++i) {
@@ -405,6 +389,22 @@ public class OwnGraph implements Serializable, Cloneable {
         weights[i] = Arrays.copyOf(ws, neighs[0] + 1);
       }
     }
+  }
+
+  /**
+   * This method check if the edge outgoing edge weights for each node forms a proper distribution.
+   * 
+   * @return
+   */
+  public boolean checkEdgeWeights() {
+    boolean edgeWeightsOK = true;
+    for (int n = 0; edgeWeightsOK && n < numOfNodes; ++n) {
+      // the sum of the weights of its outgoing edges should sum to 1 (modulo a small tolerance due to possible numerical issues)
+      if (this.neighbors[n][0] > 0 && Math.abs(this.weights[n][0] - 1.0d) > 1e-10) {
+        edgeWeightsOK = false;
+      }
+    }
+    return edgeWeightsOK;
   }
 
   public String toString() {
@@ -508,6 +508,140 @@ public class OwnGraph implements Serializable, Cloneable {
         log.format("%s/%s/%.3f,", getNodeLabel(n), getNodeLabel(neighs[o]), weights[o]);
       }
       log.flush();
+    }
+  }
+
+  /**
+   * Checks for the symmetry of the graph.
+   * 
+   * @return
+   */
+  public boolean isSymmetric() {
+    for (int i = 0; i < getNumOfNodes(); ++i) {
+      int[] neighs = getOutLinks(i);
+      for (int n = 1; n <= neighs[0]; ++n) {
+        int[] neighs2 = getOutLinks(neighs[n]);
+        int index = Arrays.binarySearch(neighs2, 1, neighs2[0] + 1, i);
+        if (index < 0) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Calculates a breadth-first search.
+   * 
+   * @param source
+   * @return
+   */
+  public int[][] bfs(int source) {
+    return bfs(source, new HashSet<Integer>());
+  }
+
+  /**
+   * Calculates a breadth-first search limited for the nodes contained in the set interestingNodes. <br />
+   * In case the interestingNodes is empty then BFS for all the nodes are calculated.
+   * 
+   * @param source
+   * @param interestingNodes
+   * @return
+   */
+  public int[][] bfs(int source, Set<Integer> interestingNodes) {
+    boolean limitedBFS = interestingNodes.size() > 0;
+    int[][] distances = new int[2][this.getNumOfNodes()];
+    for (int i = 0; i < this.getNumOfNodes(); ++i) {
+      distances[0][i] = distances[1][i] = -1;
+    }
+    distances[0][source] = 0;
+    LinkedList<Integer> queue = new LinkedList<>();
+    queue.add(source);
+    while (queue.size() > 0 && (!limitedBFS || interestingNodes.size() > 0)) {
+      int node = queue.removeFirst();
+      int[] neighbors = this.getOutLinks(node);
+      for (int i = 1; i <= neighbors[0]; ++i) {
+        if (distances[0][neighbors[i]] == -1) {
+          interestingNodes.remove(neighbors[i]);
+          distances[0][neighbors[i]] = distances[0][node] + 1;
+          distances[1][neighbors[i]] = node;
+          queue.addLast(neighbors[i]);
+        }
+      }
+    }
+    return distances;
+  }
+
+  public double[][] dijkstra(int source) {
+    return dijkstra(source, new HashSet<>());
+  }
+
+  /**
+   * Returns the shortest paths and distances in the graph assuming edge weights are probabilities. <br />
+   * In case the interestingNodes is empty then BFS for all the nodes are calculated.
+   * 
+   * @param source
+   * @return
+   */
+  public double[][] dijkstra(int source, Set<Integer> interestingNodes) {
+    boolean limitedDisjktra = interestingNodes.size() > 0;
+    double[][] shortestPaths = new double[2][this.getNumOfNodes()];// hack for returning the shortest path together with the distances simultaneously
+    for (int i = 0; i < this.getNumOfNodes(); ++i) {
+      shortestPaths[0][i] = Double.MAX_VALUE;
+      shortestPaths[1][i] = -1;
+    }
+    shortestPaths[0][source] = 0;
+    PriorityQueue<OwnNode> openNodes = new PriorityQueue<>();
+    openNodes.add(new OwnNode(source, 0.d));
+    while (openNodes.size() > 0 && (!limitedDisjktra || interestingNodes.size() > 0)) {
+      OwnNode on = openNodes.poll();
+      interestingNodes.remove(on.nodeId);
+      int[] neighbors = this.getOutLinks(on.nodeId);
+      double[] neighborWeigths = this.getWeights(on.nodeId);
+      for (int i = 1; i <= neighbors[0]; ++i) {
+        double distance = -Math.log(neighborWeigths[i]), updatedDistance = 0;
+        if ((updatedDistance = shortestPaths[0][on.nodeId] + distance) < shortestPaths[0][neighbors[i]]) {
+          shortestPaths[0][neighbors[i]] = updatedDistance;
+          shortestPaths[1][neighbors[i]] = on.nodeId;
+          openNodes.add(new OwnNode(neighbors[i], updatedDistance));
+        }
+      }
+    }
+    for (int i = 0; i < this.getNumOfNodes(); ++i) {
+      shortestPaths[0][i] = Math.exp(-shortestPaths[0][i]);
+    }
+    return shortestPaths;
+  }
+
+  class OwnNode implements Comparable<OwnNode> {
+    private int nodeId;
+    private double value;
+
+    public OwnNode(int n, double v) {
+      this.nodeId = n;
+      this.value = v;
+    }
+
+    @Override
+    public int compareTo(OwnNode o) {
+      if (this.value != o.value) {
+        return this.value > o.value ? 1 : -1;
+      } else {
+        return this.nodeId > o.nodeId ? 1 : -1;
+      }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (o instanceof OwnNode) {
+        return ((OwnNode) o).nodeId == this.nodeId;
+      }
+      return false;
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%f\t%d", this.value, this.nodeId);
     }
   }
 }

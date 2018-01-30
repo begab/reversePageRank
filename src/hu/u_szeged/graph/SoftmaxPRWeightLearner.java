@@ -1,6 +1,9 @@
 package hu.u_szeged.graph;
 
+import java.util.Arrays;
 import java.util.Set;
+
+import hu.u_szeged.utils.Utils;
 
 public class SoftmaxPRWeightLearner extends PRWeightLearner {
 
@@ -16,43 +19,46 @@ public class SoftmaxPRWeightLearner extends PRWeightLearner {
     super(prs, g, teleportProb, true, favoredNodeIds);
   }
 
-  /**
-   * Not the easiest method to debug, however, it is carefully tested with a minimal chance to contain any bug. <br />
-   * The good part is however, that method is quite efficient wrt. speed and memory consumption.
-   * 
-   * @param buffer
-   */
   public void getValueGradient(double[] buffer) {
     long time = System.currentTimeMillis();
     actualizePageRankValues();
-    int actualFromNode = 0;
-    double[] ws = graph.getWeights(actualFromNode).clone();
-    int[] neighbors = graph.getOutLinks(actualFromNode);
-    double[] partialSums = new double[neighbors[0]];
-    double expSum = 0.0;
-    for (int i = 0, k = 1; i <= graph.getNumOfEdges(); ++i, ++k) {
-      if (i == cummulatedNeighsNum[actualFromNode + 1]) {
-        for (i = cummulatedNeighsNum[actualFromNode]; i < cummulatedNeighsNum[actualFromNode + 1]; ++i) {
-          int relativePos = i - cummulatedNeighsNum[actualFromNode];
-          buffer[i] = (1 - teleportProbability) * prActual[actualFromNode] * ws[relativePos + 1] * partialSums[relativePos];
-          buffer[i] /= (expSum * expSum);
+    setPartialDerivatives(buffer, time);
+  }
+
+  protected double[] precalculateSum(int[] neighs, double[] ws, double[] oracleBaselineWeights) {
+    double sum = 0.0d, regularizationSum = 0.0d;
+    for (int n = 1; n <= neighs[0]; ++n) {
+      sum += ws[n] * (prStar[neighs[n]] / prActual[neighs[n]]);
+      if (regularizationWeight > 0 && ws[n] > 0) {
+        if (regularization == RegularizationType.ORACLE) {
+          regularizationSum += ws[n] * (ws[n] - oracleBaselineWeights[n]);
+        } else if (regularization == RegularizationType.ENTROPY) {
+          regularizationSum += ws[n] * (1 + Math.log(ws[n]));
         }
-        while (actualFromNode < cummulatedNeighsNum.length - 2 && cummulatedNeighsNum[actualFromNode + 1] == cummulatedNeighsNum[actualFromNode + 2]) {
-          actualFromNode += 1; // we have to skip through nodes in case they have no outgoing edges
-        }
-        if (++actualFromNode == graph.getNumOfNodes()) {
-          break;
-        }
-        neighbors = graph.getOutLinks(actualFromNode).clone();
-        partialSums = new double[neighbors[0]];
-        expSum = 0;
-        k = 1;
-        ws = graph.getWeights(actualFromNode).clone();
       }
-      expSum += (ws[k] = Math.exp(ws[k]));
-      for (int j = 0; j < neighbors[0]; ++j) {
-        partialSums[j] += ((prStar[neighbors[j + 1]] / prActual[neighbors[j + 1]])
-            - (prStar[neighbors[i - cummulatedNeighsNum[actualFromNode] + 1]] / prActual[neighbors[i - cummulatedNeighsNum[actualFromNode] + 1]])) * ws[k];
+    }
+    return new double[] { sum, regularizationSum };
+  }
+
+  protected void setPartialDerivatives(double[] buffer, long time) {
+    for (int i = 0, j = 0; i < graph.getNumOfNodes(); ++i) {
+      int[] neighs = graph.getOutLinks(i);
+      double[] ws = Arrays.copyOf(graph.getWeights(i), neighs[0] + 1);
+      Utils.softmaxNormalize(ws, neighs[0]);
+      double[] oracleBaselineWeights = null;
+      if (regularization == RegularizationType.ORACLE && regularizationWeight > 0) {
+        oracleBaselineWeights = calculateBaselineWeights(neighs);
+      }
+      double[] precalculatedSums = precalculateSum(neighs, ws, oracleBaselineWeights);
+      double sum = precalculatedSums[0], regularizationSum = precalculatedSums[1];
+
+      for (int n = 2; n <= neighs[0]; ++n, ++j) { // the first (unnormalized) value is constant 0, thus it suffices to start from index 2
+        buffer[j] = (1 - teleportProbability) * prActual[i] * ws[n] * (prStar[neighs[n]] / prActual[neighs[n]] - sum);
+        if (regularization == RegularizationType.ORACLE && regularizationWeight > 0 && ws[n] > 0) {
+          buffer[j] -= regularizationWeight * ws[n] * (ws[n] - oracleBaselineWeights[n] - regularizationSum);
+        } else if (regularization == RegularizationType.ENTROPY && regularizationWeight > 0 && ws[n] > 0) {
+          buffer[j] += regularizationWeight * ws[n] * (1 + Math.log(ws[n]) - regularizationSum);
+        }
       }
     }
     if ((System.currentTimeMillis() - time) / 1000.d > 180.0d) { // only print elapsed time if it was more than 3 minutes
@@ -60,57 +66,42 @@ public class SoftmaxPRWeightLearner extends PRWeightLearner {
     }
   }
 
-  public void getValueGradient2(double[] buffer) {
-    long time = System.currentTimeMillis();
-    actualizePageRankValues();
-    int actualFromNode = 0;
-    double[] ws = graph.getWeights(actualFromNode).clone();
-    int[] neighbors = graph.getOutLinks(actualFromNode);
-    double[] partialSums = new double[neighbors[0]];
-    double expSum = 0.0;
-    for (int i = 0, k = 1; i <= graph.getNumOfEdges(); ++i, ++k) {
-      if (i == cummulatedNeighsNum[actualFromNode + 1]) {
-        double expSumSquared = expSum * expSum;
-        for (i = cummulatedNeighsNum[actualFromNode]; i < cummulatedNeighsNum[actualFromNode + 1]; ++i) {
-          int relativeIndex = i - cummulatedNeighsNum[actualFromNode];
-          buffer[i] = ((1 - teleportProbability) * prActual[actualFromNode] * ws[relativeIndex] * partialSums[relativeIndex]) / expSumSquared;
-        }
-        while (actualFromNode < cummulatedNeighsNum.length - 2 && cummulatedNeighsNum[actualFromNode + 1] == cummulatedNeighsNum[actualFromNode + 2]) {
-          actualFromNode += 1; // we have to skip through nodes in case they have no outgoing edges
-        }
-        if (++actualFromNode == graph.getNumOfNodes()) {
-          break;
-        }
-        neighbors = graph.getOutLinks(actualFromNode);
-        partialSums = new double[neighbors[0]];
-        ws = graph.getWeights(actualFromNode).clone();
-        k = 1;
-        expSum = 0;
-      }
-      expSum += (ws[k] = Math.exp(ws[k]));
-      for (int j = 0; j < neighbors[0]; ++j) {
-        partialSums[j] += ((prStar[neighbors[j + 1]] / prActual[neighbors[j + 1]])
-            - (prStar[neighbors[i - cummulatedNeighsNum[actualFromNode] + 1]] / prActual[neighbors[i - cummulatedNeighsNum[actualFromNode] + 1]])) * ws[k];
+  public int getNumParameters() {
+    int edgesWithVariableWeights = 0;
+    for (int i = 0; i < graph.getNumOfNodes(); ++i) {
+      int outdegree = graph.getOutDegree(i);
+      if (outdegree > 1) {// one (unnormalized) edge weight per node is always assumed to be 0, thus not a parameter
+        edgesWithVariableWeights += outdegree - 1;
       }
     }
-    addRegularizationGradient(buffer);
-    if ((System.currentTimeMillis() - time) / 1000.d > 180.0d) { // only print elapsed time if it was more than 3 minutes
-      System.err.format("Softmax gradient in %f\n", (System.currentTimeMillis() - time) / 1000.d);
+    return edgesWithVariableWeights;
+  }
+
+  public void getParameters(double[] buffer) {
+    int i = 0;
+    for (int n = 0; n < graph.getNumOfNodes(); ++n) {
+      int numOfNeighbors = graph.getNumOfNeighbors(n);
+      double[] weights = graph.getWeights(n);
+      for (int k = 2; k <= numOfNeighbors; ++k, i++) { // one (unnormalized) edge weight per node is always assumed to be 0, thus not a parameter
+        buffer[i] = weights[k];
+      }
+    }
+  }
+
+  public void setParameters(double[] params) {
+    int i = 0;
+    for (int n = 0; n < graph.getNumOfNodes(); ++n) {
+      int[] neighs = graph.getOutLinks(n);
+      double[] weights = graph.getWeights(n);
+      double sum = 0.0d;
+      for (int k = 2; k <= neighs[0]; ++k) {
+        sum += (weights[k] = params[i++]);
+      }
+      weights[0] = sum;
     }
   }
 
   protected void actualizePageRankValues() {
     prActual = prc.calculatePageRank(graph, true);
-  }
-
-  protected double[] projectVector(double[] vec) {
-    // double expSum = 0.0d;
-    // for (int i = 0; i < vec.length; ++i) {
-    // expSum += Math.exp(vec[i]);
-    // }
-    // for (int i = 0; i < vec.length; ++i) {
-    // vec[i] = Math.log(Math.exp(vec[i]) / expSum);
-    // }
-    return vec;
   }
 }

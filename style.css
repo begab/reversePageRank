@@ -1,18 +1,18 @@
 node {
   z-index: 0;
+  fill-mode: dyn-plain;
+  size-mode: dyn-size;
+  stroke-width: 3px;
+  stroke-color: black;
   text-alignment: under;
 }
 
 node.big {
   fill-color: red, white;
-  fill-mode: dyn-plain;
-  size-mode: dyn-size;
 }
 
 node.small {
-  fill-color: blue, white;
-  fill-mode: dyn-plain;
-  size-mode: dyn-size;
+  fill-color: green, white;
 }
 
 sprite {
@@ -25,6 +25,16 @@ sprite {
 
 edge {
   shape: line;
+  fill-mode: dyn-plain;
   size-mode: dyn-size;
-  arrow-size: 3px, 2px;
+  arrow-shape: arrow;
+  arrow-size: 5px, 5px;
+}
+
+edge.below {
+  fill-color: red, black;
+}
+
+edge.larger {
+  fill-color: green, black;
 }

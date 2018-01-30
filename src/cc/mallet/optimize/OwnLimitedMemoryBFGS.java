@@ -1,20 +1,25 @@
 package cc.mallet.optimize;
 
+import java.util.Arrays;
 import java.util.LinkedList;
 
+import org.graphstream.graph.Edge;
 import org.graphstream.graph.Graph;
 import org.graphstream.graph.Node;
+import org.graphstream.ui.view.Viewer;
 
 import cc.mallet.optimize.Optimizable.ByGradientValue;
 import cc.mallet.types.MatrixOps;
 import hu.u_szeged.graph.OwnGraph;
 import hu.u_szeged.graph.PRWeightLearner;
 import hu.u_szeged.graph.visualize.VisualizePageRankLearn;
+import hu.u_szeged.utils.Utils;
 
 public class OwnLimitedMemoryBFGS extends LimitedMemoryBFGS {
 
   private double tolerance = .0001;
   private Graph graph;
+  private Viewer v;
   private LineOptimizer.ByGradient lineMaximizer;
   private OptimizerEvaluator.ByGradient eval = null;
   private boolean debug = false;
@@ -24,8 +29,10 @@ public class OwnLimitedMemoryBFGS extends LimitedMemoryBFGS {
     lineMaximizer = new BackTrackLineSearch(function);
   }
 
-  public void addVisualizationGraph(Graph g) {
+  public void addGraph(Graph g) {
     graph = g;
+    v = graph.display();
+    updateGraph();
   }
 
   @SuppressWarnings("unchecked")
@@ -191,7 +198,7 @@ public class OwnLimitedMemoryBFGS extends LimitedMemoryBFGS {
       double newValue = optimizable.getValue();
       updateGraph();
       if (graph != null) {
-        System.err.format("%f\t%f\n", -value, -newValue);
+        System.err.format("Obj. val:\t%f->%f\n", -value, -newValue);
       }
 
       // Test for terminations
@@ -293,8 +300,20 @@ public class OwnLimitedMemoryBFGS extends LimitedMemoryBFGS {
 
   private void updateGraph() {
     if (graph != null) {
-      updateNodes();
+      if (iterations == 0) {
+        try {
+          Thread.sleep(2000);
+        } catch (InterruptedException e1) {
+          e1.printStackTrace();
+        }
+      }
       updateEdges();
+      try {
+        Thread.sleep(500);
+      } catch (InterruptedException e1) {
+        e1.printStackTrace();
+      }
+      updateNodes();
     }
   }
 
@@ -302,21 +321,27 @@ public class OwnLimitedMemoryBFGS extends LimitedMemoryBFGS {
     OwnGraph og = ((PRWeightLearner) optimizable).getGraph();
     for (int i = 0, edgeIndex = 0; i < og.getNumOfNodes(); ++i) {
       int[] neighbors = og.getOutLinks(i);
-      double[] weights = og.getWeights(i).clone();
+      double[] weights = Arrays.copyOf(og.getWeights(i), og.getNumOfNeighbors(i) + 1);
       if (((PRWeightLearner) optimizable).getSoftmax()) {
-        og.softmaxNormalizeWeights(weights, neighbors[0]);
+        Utils.softmaxNormalize(weights, neighbors[0]);
       } else {
         og.normalizeWeights(weights, neighbors[0]);
       }
       for (int n = 1; n <= neighbors[0]; ++n, ++edgeIndex) {
         // System.err.format("Edge %d weight set to %f\n", edgeIndex, VisualizePageRankLearn.UNIT_EDGE_WIDTH * weights[n]);
-        graph.getEdge(edgeIndex).setAttribute("ui.size", VisualizePageRankLearn.UNIT_EDGE_WIDTH * weights[n]);
+        boolean below = weights[n] * neighbors[0] < 1;
+        Edge e = graph.getEdge(edgeIndex);
+        if (weights[n] * neighbors[0] == 1.0d) {
+        } else if (below) {
+          e.setAttribute("ui.class", "below");
+          e.setAttribute("ui.color", weights[n] * neighbors[0]);
+        } else {
+          e.setAttribute("ui.class", "larger");
+          e.setAttribute("ui.color", 1.0d / (weights[n] * neighbors[0]));
+        }
+        double relativeWeight = Math.pow(1.2d, Math.abs(1 - weights[n] * neighbors[0]));
+        e.setAttribute("ui.size", VisualizePageRankLearn.UNIT_EDGE_WIDTH * relativeWeight);
       }
-    }
-    try {
-      Thread.sleep(500);
-    } catch (InterruptedException e) {
-      e.printStackTrace();
     }
   }
 

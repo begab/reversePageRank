@@ -7,8 +7,8 @@ import java.util.Set;
 public class PageRankCalculator {
 
   public static final double DEFAULT_TELEPORT = 0.1d;
-  public static final double DEFAULT_TOL = 1E-12;
-  public static final int MAX_NUM_OF_ITERS = 300;
+  public static final double DEFAULT_TOL = 1E-9;
+  public static final int MAX_NUM_OF_ITERS = 200;
   private Set<Integer> teleportSet;
   private double teleport, tol;
 
@@ -16,14 +16,46 @@ public class PageRankCalculator {
     this(DEFAULT_TELEPORT, DEFAULT_TOL, null);
   }
 
+  /**
+   * 
+   * @param beta
+   *          teleport probability
+   */
   public PageRankCalculator(double beta) {
     this(beta, DEFAULT_TOL, null);
   }
 
+  /**
+   * 
+   * @param beta
+   *          teleport probability
+   * @param t
+   *          tolerance
+   */
   public PageRankCalculator(double beta, double t) {
     this(beta, t, null);
   }
 
+  /**
+   * 
+   * @param beta
+   *          teleport probability
+   * @param favoredNodeIds
+   *          from which set of nodes to possibly restart the random walk
+   */
+  public PageRankCalculator(double beta, Set<Integer> favoredNodeIds) {
+    this(beta, DEFAULT_TOL, favoredNodeIds);
+  }
+
+  /**
+   * 
+   * @param beta
+   *          teleport probability
+   * @param t
+   *          tolerance
+   * @param favoredNodeIds
+   *          from which set of nodes to possibly restart the random walk
+   */
   public PageRankCalculator(double beta, double t, Set<Integer> favoredNodeIds) {
     tol = t;
     teleport = beta;
@@ -52,25 +84,13 @@ public class PageRankCalculator {
    * @return
    */
   public double[] calculatePageRank(OwnGraph g, boolean softmaxNorm) {
-    return calculatePageRank(g, softmaxNorm, false, false)[0];
+    return calculatePageRank(g, softmaxNorm, false)[0];
   }
 
   /**
-   * Given a graph and its type of normalization it computes the stationary distribution for the Markov Chain corresponding to the weightig of the
-   * graph. <br/>
+   * Calculates the (personalized) page rank values of the given graph. <br/>
+   * Given a graph and its type of normalization it computes the stationary distribution for the Markov Chain over the weighted graph. <br/>
    * It can be specified if we want to get all the path towards the stationary distribution by the argument returnPerIterationRanks.
-   * 
-   * @param g
-   * @param softmaxNorm
-   * @param returnPerIterationRanks
-   * @return
-   */
-  public double[][] calculatePageRank(OwnGraph g, boolean softmaxNorm, boolean returnPerIterationRanks) {
-    return calculatePageRank(g, softmaxNorm, returnPerIterationRanks, false);
-  }
-
-  /**
-   * Calculates the (personalized) page rank values of the given graph.
    * 
    * @param graph
    * @param softmaxnormalize
@@ -78,7 +98,12 @@ public class PageRankCalculator {
    * @param debug
    * @return
    */
-  public double[][] calculatePageRank(OwnGraph graph, boolean softmaxnormalize, boolean returnPerIterationRanks, boolean debug) {
+  public double[][] calculatePageRank(OwnGraph graph, boolean softmaxnormalize, boolean returnPerIterationRanks) {
+    if (softmaxnormalize) {
+      graph.softmaxNormalizeWeights();
+    } else {
+      graph.normalizeWeights();
+    }
     int numOfNodes = graph.getNumOfNodes(), iterations = 0;
     List<double[]> ranksPerIteration = new LinkedList<>();
     double[] ranks = initDistr(numOfNodes);
@@ -88,22 +113,17 @@ public class PageRankCalculator {
         ranksPerIteration.add(ranks);
       }
       double[] newRanks = new double[numOfNodes];
-      double sum = 0.0d;
+      double sum = 0.d;
       for (int i = 0; i < numOfNodes; ++i) {
         int[] neighs = graph.getOutLinks(i);
-        double[] weights = graph.getWeights(i).clone();
-        if (softmaxnormalize) {
-          graph.softmaxNormalizeWeights(weights, neighs[0]);
-        } else {
-          graph.normalizeWeights(weights, neighs[0]);
-        }
+        double[] weights = graph.getWeights(i);
         for (int n = 1; n <= neighs[0]; ++n) {
           double s = (1 - teleport) * weights[n] * ranks[i];
           newRanks[neighs[n]] += s;
           sum += s;
         }
       }
-      difference = redistributeMissingPagerank(graph, sum, newRanks, ranks);
+      difference = redistributeMissingPagerank(graph.getNumOfNodes(), sum, newRanks, ranks);
       ranks = newRanks;
     }
     ranksPerIteration.add(ranks);
@@ -112,7 +132,10 @@ public class PageRankCalculator {
     for (double[] r : ranksPerIteration) {
       ranksToReturn[t++] = r;
     }
-    printInfo(iterations, ranks, debug);
+    // printInfo(iterations, ranks);
+    if (softmaxnormalize) {
+      graph.softmaxDenormalizeWeights();
+    }
     return ranksToReturn;
   }
 
@@ -124,14 +147,14 @@ public class PageRankCalculator {
    * @param ranks
    * @return
    */
-  private double redistributeMissingPagerank(OwnGraph graph, double sum, double[] newRanks, double[] ranks) {
-    int numOfNodes = graph.getNumOfNodes(), denominator = numOfNodes;
+  private double redistributeMissingPagerank(int nodeNumber, double sum, double[] newRanks, double[] ranks) {
+    int denominator = nodeNumber;
     double difference = 0.0d;
     if (teleportSet != null && teleportSet.size() > 0) {
       denominator = teleportSet.size();
     }
-    for (int i = 0; i < numOfNodes; ++i) {
-      if (denominator == numOfNodes || teleportSet.contains(i)) {
+    for (int i = 0; i < nodeNumber; ++i) {
+      if (denominator == nodeNumber || teleportSet.contains(i)) {
         newRanks[i] += (1 - sum) / denominator; // either there is no teleport set defined or the node is in the teleport set
       }
       newRanks[i] = Math.max(newRanks[i], 0.0d);
@@ -140,18 +163,28 @@ public class PageRankCalculator {
     return difference;
   }
 
-  private void printInfo(int iters, double[] rank, boolean debug) {
+  private void printInfo(int iters, double[] rank) {
     if (iters == MAX_NUM_OF_ITERS) {
       // System.err.format("WARNING: Max number of PR iterations (i.e. %d) performed\n", MAX_NUM_OF_ITERS);
     }
 
-    if (debug) {
-      System.err.println(iters + " iterations performed");
-      for (int i = 0; i < rank.length; ++i) {
-        System.err.print(rank[i] + " ");
-      }
-      System.err.println();
+    System.err.println(iters + " iterations performed");
+    for (int i = 0; i < rank.length; ++i) {
+      System.err.print(rank[i] + " ");
     }
+    System.err.println();
+  }
+
+  public static void main(String[] args) {
+    OwnGraph g = new OwnGraph(6);
+    int[] froms = { 0, 0, 1, 2, 2, 3, 4 };
+    int[] tos = { 1, 2, 2, 3, 5, 4, 5 };
+    // double[] weights = { .3, .7, .2, .8, .1, .9, .2, .8, .4 };
+    for (int i = 0; i < froms.length; ++i) {
+      g.addBidirectionalEdge(froms[i], tos[i]);
+    }
+    PageRankCalculator prc = new PageRankCalculator(0.2);
+    prc.calculatePageRank(g, true);
   }
 
 }

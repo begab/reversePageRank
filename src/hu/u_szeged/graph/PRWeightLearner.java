@@ -20,22 +20,27 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
   private boolean extensiveSerialization;
   private String serializationPrefix;
 
-  private boolean softmax;
-  private double regularizationWeight;
+  public static enum RegularizationType {
+    NONE, ENTROPY, ORACLE
+  };
 
-  protected int[] cummulatedNeighsNum; // for efficient lookup of a specific edge by index (NB: edges are ordered lexicographically;e.g. (1,10)<(2,3))
+  private boolean softmax;
 
   protected double[] prStar;
   protected double[] prInitial; // let's keep the original (i.e. unweighted) pagerank scores as well
   protected double[] prActual;
 
+  protected RegularizationType regularization;
+  protected double regularizationWeight;
   protected double teleportProbability;
   protected OwnGraph graph;
   protected PageRankCalculator prc;
 
   protected abstract void actualizePageRankValues();
 
-  protected abstract double[] projectVector(double[] vec);
+  protected double[] projectVector(double[] vec) {
+    return vec;
+  }
 
   public PRWeightLearner(double[] prs, OwnGraph g, boolean softmaxNorm) {
     this(prs, g, PageRankCalculator.DEFAULT_TELEPORT, softmaxNorm, null);
@@ -54,14 +59,6 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     prc = new PageRankCalculator(teleportProbability);
     prc.setFavoredNodes(favoredNodeIds);
     prInitial = prc.calculatePageRank(graph, softmax);
-    updateCummulatedNeighsNum();
-  }
-
-  public void updateCummulatedNeighsNum() {
-    cummulatedNeighsNum = new int[graph.getNumOfNodes() + 1];
-    for (int n = 1; n < cummulatedNeighsNum.length; ++n) {
-      cummulatedNeighsNum[n] = cummulatedNeighsNum[n - 1] + graph.getNumOfNeighbors(n - 1);
-    }
   }
 
   public boolean getSoftmax() {
@@ -86,7 +83,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     return getActualPRvalues()[i];
   }
 
-  public double[] getInitialPRvalue() {
+  public double[] getInitialPRvalues() {
     return prInitial;
   }
 
@@ -108,18 +105,17 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
 
   public double[][] learnEdgeWeights(int numOfInitializations, boolean returnAllParametersLearned, boolean averageModels) {
     double bestFinalObjVal = Double.NEGATIVE_INFINITY;
-    double[] bestParameters = new double[getNumParameters()];
+    double[] bestParameters = new double[graph.getNumOfEdges()];
     double[][] toReturn = new double[(returnAllParametersLearned ? numOfInitializations : 0) + 3][];
     toReturn[0] = new double[2 * (numOfInitializations + 1)]; // contains the objective values and the index of the best initialization
-    toReturn[toReturn.length - 2] = new double[getNumParameters()]; // the last row contains an averaged model over the different initializations
-    toReturn[toReturn.length - 1] = new double[numOfInitializations + 1]; // stores the per initialization and the aggregated runtimes
+    toReturn[toReturn.length - 2] = new double[graph.getNumOfEdges()]; // the last row contains an averaged model over the different initializations
+    toReturn[toReturn.length - 1] = new double[numOfInitializations + 1]; // stores the per initialization and the aggregated run times
     for (int i = 0; i < numOfInitializations; ++i) {
       if (i == 0) {
         graph.initWeights(WeightingStrategy.UNIFORM);
       } else {
         graph.initWeights(WeightingStrategy.RAND);
       }
-      System.err.println(Arrays.toString(Arrays.copyOf(graph.getWeights(), 11)));
       long time = System.currentTimeMillis();
       double[] objVals = learnEdgeWeights();
       toReturn[toReturn.length - 1][i] = (System.currentTimeMillis() - time) / 1000.0d;
@@ -135,8 +131,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
       toReturn[0][2 * i] = objVals[0]; // this is the initial objective value
       toReturn[0][2 * i + 1] = objVals[1]; // this is the objective value obtained after the optimization
 
-      double[] actualParameters = new double[getNumParameters()];
-      getParameters(actualParameters);
+      double[] actualParameters = graph.getWeights();
       for (int k = 0; k < actualParameters.length; ++k) {
         toReturn[toReturn.length - 2][k] += actualParameters[k];
       }
@@ -160,20 +155,18 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     } else {
       graph.setWeights(bestParameters);
     }
-    double[] prFinal = prc.calculatePageRank(graph, false); // in this case weights should already be normalized
-    toReturn[0][toReturn[0].length - 1] = getValue(prFinal); // store the objective value of the averaged model
+    double[] prFinal = prc.calculatePageRank(graph, false); // in this case weights need not be normalized (as it had already taken place)
+    toReturn[0][toReturn[0].length - 1] = getValue(prFinal, false); // store the objective value of the averaged model
     return toReturn;
   }
 
   private double[] learnEdgeWeights() {
     double initObjVal = getValue();
-    for (int i = 0; i < 1; ++i) {
-      Optimizer optimizer = new OwnLimitedMemoryBFGS(this);
-      try {
-        optimizer.optimize();
-      } catch (OptimizationException | IllegalArgumentException e) {
-        System.err.println(e.getLocalizedMessage()); // This condition does not necessarily mean that the optimizer has failed (but it might has)
-      }
+    Optimizer optimizer = new OwnLimitedMemoryBFGS(this);
+    try {
+      optimizer.optimize();
+    } catch (OptimizationException | IllegalArgumentException e) {
+      System.err.println(e.getLocalizedMessage()); // This condition does not necessarily mean that the optimizer has failed (but it might has)
     }
     double finalObjective = getValue();
     return new double[] { initObjVal, finalObjective };
@@ -195,8 +188,24 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     return graph;
   }
 
-  public void setRegularizationWeight(double r) {
+  public double getRegularizationWeight() {
+    return regularizationWeight;
+  }
+
+  public void setRegularization(double r) {
+    setRegularization(r, RegularizationType.ORACLE);
+  }
+
+  public void setRegularization(double r, RegularizationType rt) {
     regularizationWeight = r;
+    regularization = rt;
+    if (regularization == RegularizationType.NONE) {
+      regularizationWeight = 0.0d;
+    }
+  }
+
+  public String regularizationToString() {
+    return String.format("_%s_%.8f", regularization, regularizationWeight);
   }
 
   public int getNumParameters() {
@@ -215,22 +224,11 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
   }
 
   public void setParameters(double[] params) {
-    int i = 0;
-    for (int n = 0; n < graph.getNumOfNodes(); ++n) {
-      int[] neighs = graph.getOutLinks(n);
-      double[] weights = graph.getWeights(n);
-      double[] newWeights = new double[neighs[0]];
-      for (int k = 0; k < neighs[0]; ++k, ++i) {
-        newWeights[k] = params[i];
-      }
-      double sum = 0.0d;
-      newWeights = projectVector(newWeights);
-      for (int j = 1; j <= neighs[0]; ++j) {
-        sum += (weights[j] = newWeights[j - 1]);
-      }
-      weights[0] = sum;
+    try {
+      throw new Exception("We shall not rely on this method.");
+    } catch (Exception e) {
+      e.printStackTrace();
     }
-    // System.err.println("PARAMS set");
   }
 
   public double getParameter(int index) {
@@ -239,13 +237,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     } catch (Exception e) {
       e.printStackTrace();
     }
-    int from = Arrays.binarySearch(cummulatedNeighsNum, index);
-    if (from < 0) {
-      from = -from - 2;
-    }
-    index -= cummulatedNeighsNum[from];
-    // System.err.format("%d\t%d\t%.4f\n", from, graph.getNeighbors(from)[index + 1], graph.getWeights(from)[index + 1]);
-    return graph.getWeights(from)[index];
+    return -1;
   }
 
   public void setParameter(int index, double value) {
@@ -254,15 +246,6 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     } catch (Exception e) {
       e.printStackTrace();
     }
-    int from = Arrays.binarySearch(cummulatedNeighsNum, index);
-    if (from < 0) {
-      from = -from - 2;
-    }
-    index -= cummulatedNeighsNum[from];
-    // System.err.format("%d\t%d\t%.4f\n", from, graph.getNeighbors(from)[index + 1], graph.getWeights(from)[index + 1]);
-    double newWeight = value;
-    graph.getWeights(from)[0] = graph.getWeights(from)[0] - graph.getWeights(from)[index] + newWeight;
-    graph.getWeights(from)[index] = newWeight;
   }
 
   /**
@@ -270,66 +253,115 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
    */
   public double getValue() {
     actualizePageRankValues();
-    return getValue(prActual);
+    return getValue(prActual, true);
   }
 
-  public double getValue(double[] alternativePr) {
-    double negativeKLDivergence = 0.0d;
+  /**
+   * Returns hypothesized edge weights for a node with given certain neighborhood assuming edge weights are proportional to oracle scores.
+   * 
+   * @param neighs
+   * @return
+   */
+  protected double[] calculateBaselineWeights(int[] neighs) {
+    double sum = 0.0d;
+    double[] oracleBasedWeights = new double[neighs[0] + 1];
+    for (int i = 1; i <= neighs[0]; ++i) {
+      sum += (oracleBasedWeights[i] = prStar[neighs[i]]);
+    }
+    for (int i = 1; i <= neighs[0]; ++i) {
+      oracleBasedWeights[i] /= sum;
+    }
+    return oracleBasedWeights;
+  }
+
+  public double getValue(double[] alternativePr, boolean needsSoftmaxNormalization) {
+    double negativeKLDivergence = 0.0d, regularizationScore = 0;
     for (int i = 0; i < prStar.length; ++i) {
       if (prStar[i] > 0 && alternativePr[i] > 0) {
         negativeKLDivergence -= prStar[i] * Math.log(prStar[i] / alternativePr[i]);
         // negativeCrossEntropy += prStar[i] * Math.log(alternativePr[i]);
-      }
-    }
-    return negativeKLDivergence + calculateRegularization();
-  }
-
-  protected void addRegularizationGradient(double[] buffer) {
-    if (regularizationWeight > 0.0d) {
-      for (int n = 0, i = 0; n < graph.getNumOfNodes(); ++n) {
-        double[] ws = graph.getWeights(n);
-        for (int j = 1; j <= graph.getNumOfNeighbors(n); ++j, ++i) {
-          buffer[i] -= regularizationWeight * ws[j];
+        if (regularization == RegularizationType.ENTROPY) {
+          regularizationScore -= calculateNegativeEntropy(i);
         }
       }
     }
-  }
-
-  protected double calculateRegularization() {
-    double regularization = 0.0d;
-    for (int n = 0; n < graph.getNumOfNodes(); ++n) {
-      double[] ws = graph.getWeights(n);
-      double sqrdLength = 0.0d;
-      for (int i = 1; i <= graph.getNumOfNeighbors(n); ++i) {
-        sqrdLength += ws[i] * ws[i];
-      }
-      regularization += sqrdLength;
+    if (regularization == RegularizationType.ORACLE) {
+      regularizationScore = calculateRegularization(needsSoftmaxNormalization);
     }
-    return -0.5d * regularizationWeight * regularization;
+    return negativeKLDivergence - regularizationWeight * regularizationScore;
   }
 
-  public OwnGraph getBaselineGraph() {
+  protected double calculateRegularization(boolean needsSoftmaxNormalization) {
+    double r = 0;
+    if (needsSoftmaxNormalization) {
+      graph.softmaxNormalizeWeights();
+    }
+    for (int i = 0; i < graph.getNumOfNodes(); ++i) {
+      int[] neighbors = graph.getOutLinks(i);
+      double[] expectedWeights = calculateBaselineWeights(neighbors);
+      double[] currentEdgeWeights = graph.getWeights(i);
+      for (int n = 1; n <= neighbors[0]; ++n) {
+        double diff = (expectedWeights[n] - currentEdgeWeights[n]);
+        r += diff * diff;
+      }
+    }
+    if (needsSoftmaxNormalization) {
+      graph.softmaxDenormalizeWeights();
+    }
+    return .5 * r;
+  }
+
+  private double calculateNegativeEntropy(int node) {
+    double entropy = 0.0d;
+    if (regularizationWeight > 0) {
+      int degree = graph.getOutDegree(node);
+      double[] weights = Arrays.copyOf(graph.getWeights(node), degree + 1);
+      Utils.softmaxNormalize(weights, degree);
+      for (int n = 1; n < weights.length; ++n) {
+        if (weights[n] > 0) {
+          entropy += weights[n] * Math.log(weights[n]);
+        }
+      }
+    }
+    return entropy;
+  }
+
+  protected void addRegularizationGradient(double[] buffer) {
+    try {
+      throw new Exception("Method for calculating the gradient of the entropy based regularization is uninplemented.");
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  private OwnGraph getBaselineGraph() {
     OwnGraph baselineGraph = new OwnGraph(graph.getNumOfNodes());
     for (int i = 0; i < graph.getNumOfNodes(); ++i) {
       int[] neighbors = graph.getOutLinks(i);
+      double[] baselineWeights = calculateBaselineWeights(neighbors);
       for (int j = 1; j <= neighbors[0]; ++j) {
-        baselineGraph.addEdge(i, neighbors[j], prStar[neighbors[j]]);
+        baselineGraph.addEdge(i, neighbors[j], baselineWeights[j]);
       }
     }
-    baselineGraph.normalizeWeights();
     return baselineGraph;
   }
 
   public double getBaselineValue() {
-    return getBaselineValue(getBaselineGraph());
+    OwnGraph baselineGraph = getBaselineGraph();
+    double[] baselinePageranks = prc.calculatePageRank(baselineGraph, false);
+    return getValue(baselinePageranks, false);
   }
 
-  public double getBaselineValue(OwnGraph blg) {
-    PRWeightLearner l = new SoftmaxPRWeightLearner(prStar, blg, this.teleportProbability);
-    l.setRegularizationWeight(this.regularizationWeight);
-    l.prActual = prc.calculatePageRank(blg, false);
-    return l.getValue();
+  public double getBaselineValue(double[] baselineEdgeWeights) {
+    OwnGraph baselineGraph = this.graph.clone();
+    baselineGraph.setWeights(baselineEdgeWeights);
+    double[] baselinePageranks = prc.calculatePageRank(baselineGraph, false);
+    return getValue(baselinePageranks, false);
   }
+
+  // public double getBaselineValue(OwnGraph blg) {
+  // return getValue(prc.calculatePageRank(blg, false), false);
+  // }
 
   public void serializeWeights(String outFile) {
     Utils.serialize(outFile, graph.getWeights());
@@ -343,27 +375,62 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     for (int n = 0; n < graph.getNumOfNodes(); ++n) {
       int[] neighs = graph.getOutLinks(n);
       double[] weights = graph.getWeights(n);
-      double[] baselineWs = new double[neighs[0]];
-      double sum = 0.0d;
-      for (int i = 1; relativize && i <= neighs[0]; ++i) {
-        sum += (baselineWs[i - 1] = getEtalonPRvalue(neighs[i]));
-      }
+      double[] baselineWs = calculateBaselineWeights(neighs);
       double[] weightsToRank = new double[neighs[0]];
       for (int i = 1; i <= neighs[0]; ++i) {
-        weightsToRank[i - 1] = weights[i];
-        if (relativize) {
-          weightsToRank[i - 1] -= (baselineWs[i - 1] / sum);
-        }
+        weightsToRank[i - 1] = weights[i] - (relativize ? baselineWs[i] : 0.0d);
       }
 
       int[] order = Utils.stableSort(weightsToRank);
-      double expected = weights[0] / neighs[0];
-      log.format("%d\t%s\t%f\t%d\t%f\n", n, graph.getNodeLabel(n), expected, neighs[0], weights[0]);
+      double expected = neighs[0] == 0 ? 0 : 1.0 / neighs[0];
+      log.format("%d\t%s\t%f\t%d\n", n, graph.getNodeLabel(n), expected, neighs[0]);
       for (int i = 0; i < Math.min(order.length, maxToPrint); ++i) {
         int o = order[order.length - 1 - i];
-        log.format("\t->%s\t%.9f\n", graph.getNodeLabel(neighs[o + 1]), weightsToRank[o]);
+        log.format("\t->%s\t%.6f\t%.6f\n", graph.getNodeLabel(neighs[o + 1]), weightsToRank[o], baselineWs[o + 1]);
       }
       log.flush();
+    }
+  }
+
+  public static void performTest(int[][] testCase, boolean undirectedGraph) {
+    performTest(testCase, undirectedGraph, 0.0d, 0.1d, RegularizationType.NONE);
+  }
+
+  public static void performTest(int[][] testCase, boolean directedGraph, double regularization, double teleportProb, RegularizationType rt) {
+    int numOfNodes = testCase[0].length, sumEtalonRank = 0;
+    double[] prStar = new double[numOfNodes];
+
+    for (int i = 0; i < numOfNodes; ++i) {
+      prStar[i] = testCase[0][i];
+      sumEtalonRank += testCase[0][i];
+    }
+    for (int i = 0; i < numOfNodes; ++i) {
+      prStar[i] /= (double) sumEtalonRank;
+    }
+
+    OwnGraph g = new OwnGraph(testCase[1], testCase[2], directedGraph, numOfNodes);
+    g.initWeights(WeightingStrategy.UNIFORM);
+    PRWeightLearner learner = new SoftmaxPRWeightLearner(prStar, g, teleportProb);
+    learner.setRegularization(regularization, rt);
+    learner.learnEdgeWeights(1, true);
+    learner.extensiveLog();
+
+    g.printWeightMatrix();
+    // g.saveToDot(learner.getActualPRvalues(), prStar, "test1_wl.dot");
+  }
+
+  public static void main(String[] args) {
+    int[][][] testCases = { { { 25, 25, 20, 10, 10, 10 }, { 0, 0, 1, 2, 2, 3, 4 }, { 1, 2, 2, 3, 5, 4, 5 } } }; // , // undirected
+    // { { 30, 25, 5, 5, 15, 20 }, { 0, 0, 1, 2, 3, 3, 4 }, { 1, 5, 2, 3, 4, 5, 5 } }, // undirected
+    // { { 30, 20, 15, 35 }, { 0, 0, 1, 2, 2, 3 }, { 1, 3, 2, 0, 3, 1 } } };// if directed no 'good' solution exists
+    RegularizationType rt = RegularizationType.ORACLE;
+    for (int i = 0; i < testCases.length; ++i) {
+      // performTest(testCases[i], false, 0.0d, 0.1d, false);
+      // System.err.println("~~~~~~~~~~");
+      for (double reg : new double[] { 0.0 }) {
+        performTest(testCases[i], false, reg, 0.1d, rt);
+        System.err.println("==========");
+      }
     }
   }
 }
