@@ -7,7 +7,7 @@ In this setting the network topology and the importance of the nodes (i.e. the s
 Assuming access to Maven, the quickest way to give the algorithm a try and also to see a visualization is to enter  
 ```mvn package```  
 in the command line.  
-Note that running the above command creates a file names `inversePR.txt` in the current working directory with details of the learning procedure.
+Note that running the above command creates a file named `inversePR.txt` in the current working directory with details of the learning procedure printed to it.
 
 ## Dependencies
 Our source code relies on the following dependencies (also included in the pom.xml for Maven.)
