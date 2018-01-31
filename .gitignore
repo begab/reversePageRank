@@ -2,5 +2,8 @@
 .project
 .settings
 /bin/
+/lib/
 /target/
 *~
+*.txt
+

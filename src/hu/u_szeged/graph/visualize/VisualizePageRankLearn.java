@@ -1,5 +1,9 @@
 package hu.u_szeged.graph.visualize;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
+
 import org.graphstream.graph.Edge;
 import org.graphstream.graph.Graph;
 import org.graphstream.graph.Node;
@@ -33,15 +37,18 @@ public class VisualizePageRankLearn {
     return prStar;
   }
 
-  public static void main(String args[]) {
+  public static void main(String args[]) throws IOException {
     SyntheticExperiment.RANDOM.setSeed(10l);
     System.setProperty("org.graphstream.ui.renderer", "org.graphstream.ui.j2dviewer.J2DGraphRenderer");
 
     int[][] testCase = new int[][] { { 26, 24, 12, 9, 16, 13 }, { 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5 }, { 1, 0, 2, 0, 1, 5, 2, 4, 3, 5, 3, 4 } };
     double[] prStar = calculatePrStar(testCase[0]);
+    FileWriter fw = new FileWriter("inversePR.txt");
+    fw.write(String.format("The expected stationary distribution the random walk should converge to is: %s\n", Arrays.toString(prStar)));
     OwnGraph g = new OwnGraph(testCase[1], testCase[2], true, testCase[0].length);
-    System.err.println("Weight matrix of g before optimization of graph.");
-    g.printWeightMatrix();
+    String originalMtx = g.returnWeightMatrix();
+    fw.write(String.format("The original (i.e. uniformly weighted) transition matrix:\n%s\n", originalMtx));
+    System.err.println(String.format("The original (i.e. uniformly weighted) transition matrix:\n%s\n", originalMtx));
 
     PRWeightLearner pwl = new SoftmaxPRWeightLearner(prStar, g, .0d);
     pwl.setRegularization(0d, PRWeightLearner.RegularizationType.NONE);
@@ -85,7 +92,12 @@ public class VisualizePageRankLearn {
     double finalObjective = pwl.getValue();
     pwl.getGraph().softmaxNormalizeWeights();
     pwl.extensiveLog();
-    g.printWeightMatrix();
+    String finalMtx = g.returnWeightMatrix();
+    fw.write(String.format("Objective value changed from %.6f to %.6f.\n", -initObjVal, -finalObjective));
+    fw.write(String.format("The learned weighted transition matrix:\n%s\n", finalMtx));
+    System.err.println(String.format("The learned weighted transition matrix:\n%s\n", finalMtx));
+    fw.write(String.format("The stationary distribution of the learned random walk is: %s\n", Arrays.toString(pwl.getActualPRvalues())));
     System.err.format("Objective value changed from %.6f to %.6f.\n", -initObjVal, -finalObjective);
+    fw.close();
   }
 }

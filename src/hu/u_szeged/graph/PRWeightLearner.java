@@ -415,7 +415,8 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     learner.learnEdgeWeights(1, true);
     learner.extensiveLog();
 
-    g.printWeightMatrix();
+    String weightMtx = g.returnWeightMatrix();
+    System.err.println(weightMtx);
     // g.saveToDot(learner.getActualPRvalues(), prStar, "test1_wl.dot");
   }
 

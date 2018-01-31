@@ -423,7 +423,7 @@ public class OwnGraph implements Serializable, Cloneable {
   /**
    * This method prints the weight matrix corresponding to the actual state of the object in an Octave-compatible sparse matrix format.
    */
-  public void printWeightMatrix() {
+  public String returnWeightMatrix() {
     int[] froms = new int[numOfEdges], tos = new int[numOfEdges];
     double[] ws = new double[numOfEdges];
     for (int n = 0, i = 0; n < this.getNumOfNodes(); ++n) {
@@ -435,7 +435,7 @@ public class OwnGraph implements Serializable, Cloneable {
         ws[i] = weights[j];
       }
     }
-    System.err.format("M=sparse(%s,%s,%s,%d,%d);\n", Arrays.toString(froms), Arrays.toString(tos), Arrays.toString(ws), numOfNodes, numOfNodes);
+    return String.format("M=sparse(%s,%s,%s,%d,%d);\n", Arrays.toString(froms), Arrays.toString(tos), Arrays.toString(ws), numOfNodes, numOfNodes);
   }
 
   /**

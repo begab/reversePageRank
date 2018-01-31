@@ -288,10 +288,10 @@ public class SyntheticExperiment {
   public static void main(String[] args) {
     PageRankCalculator pc = new PageRankCalculator(0.1);
     SyntheticExperiment se = new SyntheticExperiment();
-    WeightingStrategy degreeBasedWeights = WeightingStrategy.DEGREE_BASED;
+    WeightingStrategy degreeBasedWeights = WeightingStrategy.RAND;
     int numOfExperiments = 100, numOfRestarts = 50, numOfNodes = 5_000;
 
-    args = new String[] { "ScaleFree" }; // DorogovtsevMendes WattsStrogatz Random ScaleFree
+    args = new String[] { "DorogovtsevMendes" }; // DorogovtsevMendes WattsStrogatz Random ScaleFree
     System.err.format("Edge weights are drawn in a(n) %s manner.\n", degreeBasedWeights.toString());
     for (String gg : args) {
       try (PrintWriter logOut = new PrintWriter(String.format("%s_%s_new.txt", degreeBasedWeights.toString(), gg));
