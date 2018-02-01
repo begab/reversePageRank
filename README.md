@@ -12,4 +12,5 @@ Note that running the above command creates a file named `inversePR.txt` in the 
 ## Dependencies
 Our source code relies on the following dependencies (also included in the pom.xml for Maven.)
 * Graphstream v1.3 (http://graphstream-project.org/download/)
-* Mallet (http://mallet.cs.umass.edu/download.php)
+* Mallet v2.0.9 (http://mallet.cs.umass.edu/download.php)
+* Apache Commons Math v3.6 (http://commons.apache.org/proper/commons-math/download_math.cgi)
