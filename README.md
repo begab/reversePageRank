@@ -1,4 +1,4 @@
-# Supplementary code for the paper _Learning the transition matrix for the weighted inverse PageRank problem_
+# Supplementary code for the paper _Efficient estimation of transitional probabilities in Markov chains_
 
 This repo includes the code for performing Inverse PageRank calculation.
 In this setting the network topology and the importance of the nodes (i.e. the stationary distribution of a random walk) are assumed to be known in advance and algorithm looks for a weighting of the edges which ensures that the random walk visits each node proportional to the importance of the nodes provided in advance.
