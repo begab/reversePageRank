@@ -6,7 +6,7 @@ import java.util.Set;
 
 public class PageRankCalculator {
 
-  public static final double DEFAULT_TELEPORT = 0.1d;
+  public static final double DEFAULT_TELEPORT = 0.01d;
   public static final double DEFAULT_TOL = 1E-9;
   public static final int MAX_NUM_OF_ITERS = 200;
   private Set<Integer> teleportSet;
@@ -155,7 +155,9 @@ public class PageRankCalculator {
     }
     for (int i = 0; i < nodeNumber; ++i) {
       if (denominator == nodeNumber || teleportSet.contains(i)) {
-        newRanks[i] += (1 - sum) / denominator; // either there is no teleport set defined or the node is in the teleport set
+        newRanks[i] += (1 - sum) / denominator; // either there is no teleport
+                                                // set defined or the node is in
+                                                // the teleport set
       }
       newRanks[i] = Math.max(newRanks[i], 0.0d);
       difference += Math.pow(ranks[i] - newRanks[i], 2.0d);
@@ -165,7 +167,8 @@ public class PageRankCalculator {
 
   private void printInfo(int iters, double[] rank) {
     if (iters == MAX_NUM_OF_ITERS) {
-      // System.err.format("WARNING: Max number of PR iterations (i.e. %d) performed\n", MAX_NUM_OF_ITERS);
+      // System.err.format("WARNING: Max number of PR iterations (i.e. %d)
+      // performed\n", MAX_NUM_OF_ITERS);
     }
 
     System.err.println(iters + " iterations performed");

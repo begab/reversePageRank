@@ -393,7 +393,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
   }
 
   public static void performTest(int[][] testCase, boolean undirectedGraph) {
-    performTest(testCase, undirectedGraph, 0.0d, 0.1d, RegularizationType.NONE);
+    performTest(testCase, undirectedGraph, 0.0d, 0.01d, RegularizationType.NONE);
   }
 
   public static void performTest(int[][] testCase, boolean directedGraph, double regularization, double teleportProb, RegularizationType rt) {
@@ -426,7 +426,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     // { { 30, 20, 15, 35 }, { 0, 0, 1, 2, 2, 3 }, { 1, 3, 2, 0, 3, 1 } } };// if directed no 'good' solution exists
     RegularizationType rt = RegularizationType.ORACLE;
     for (int i = 0; i < testCases.length; ++i) {
-      // performTest(testCases[i], false, 0.0d, 0.1d, false);
+      // performTest(testCases[i], false, 0.0d, 0.01d, false);
       // System.err.println("~~~~~~~~~~");
       for (double reg : new double[] { 0.0 }) {
         performTest(testCases[i], false, reg, 0.1d, rt);

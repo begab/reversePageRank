@@ -6,4 +6,5 @@
 /target/
 *~
 *.txt
-
+*.gz
+*.params

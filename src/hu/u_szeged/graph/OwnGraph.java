@@ -168,6 +168,14 @@ public class OwnGraph implements Serializable, Cloneable {
     return everyWeight;
   }
 
+  public double getTotalWeights() {
+    double totalWeight = 0.0d;
+    for (int i = 0; i < getNumOfNodes(); ++i) {
+      totalWeight += getWeights(i)[0];
+    }
+    return totalWeight;
+  }
+
   public double[] getWeights(int target) {
     return weights[target];
   }
@@ -271,6 +279,7 @@ public class OwnGraph implements Serializable, Cloneable {
 
   /**
    * The edge is only added if it was not previously present in the network. <br />
+   * In case the edge was present then its weight is going to be increased by the weight parameter.<br />
    * Returns true if the edge was not yet present in the graph.
    * 
    * @param from
@@ -294,6 +303,7 @@ public class OwnGraph implements Serializable, Cloneable {
       neighbors[from][index] = to;
       weights[from][index] = weight;
     } else {
+      weights[from][0] += weight;
       weights[from][index] += weight;
     }
     return index < 0;
