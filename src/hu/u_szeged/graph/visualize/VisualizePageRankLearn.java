@@ -42,6 +42,7 @@ public class VisualizePageRankLearn {
     System.setProperty("org.graphstream.ui.renderer", "org.graphstream.ui.j2dviewer.J2DGraphRenderer");
 
     int[][] testCase = new int[][] { { 26, 24, 12, 9, 16, 13 }, { 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5 }, { 1, 0, 2, 0, 1, 5, 2, 4, 3, 5, 3, 4 } };
+    // int[][] testCase = new int[][] { { 18192, 21089, 32239, 22480 }, { 0, 0, 1, 1, 1, 2, 2, 2, 3, 3 }, { 1, 2, 0, 2, 3, 0, 1, 3, 1, 2 } };
     double[] prStar = calculatePrStar(testCase[0]);
     FileWriter fw = new FileWriter("inversePR.txt");
     fw.write(String.format("The expected stationary distribution the random walk should converge to is: %s\n", Arrays.toString(prStar)));
