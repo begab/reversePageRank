@@ -1191,7 +1191,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       } catch (IOException e) {
         e.printStackTrace();
       }
-    } else if (args[3].startsWith("choicerankEval")) {
+    } else if (args[3].startsWith("extendedEval")) {
       String mode = args[3].split("_")[1].split("=")[0];
       System.err.println(mode);
       we.loadEdgeWeights(modelId);
