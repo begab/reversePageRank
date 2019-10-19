@@ -1196,7 +1196,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       we.loadEdgeWeights(modelId);
       String f = "/home/berend/datasets/wikipedia_clickstream/2016_03_en_clickstream.tsv.gz";
       try (BufferedReader br = new BufferedReader(new InputStreamReader(new GZIPInputStream(new FileInputStream(f))));
-          PrintWriter out = new PrintWriter(String.format("%s.out", mode))) {
+          PrintWriter out = new PrintWriter(String.format("eval_%s.out", mode))) {
         String line, currentArticle = "";
         int totalClicks = 0;
         Map<Integer, Integer> etalonNeighbors = new HashMap<>();
