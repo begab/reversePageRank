@@ -159,9 +159,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       }
     }
     for (int i = 0; i < etalonDistr.length; ++i) {
-      etalonDistr[i] = (etalonDistr[i] + 1) / (double) (totalRequests + etalonDistr.length); // adds
-                                                                                             // Laplace
-                                                                                             // smoothing
+      etalonDistr[i] = (etalonDistr[i] + 1) / (double) (totalRequests + etalonDistr.length); // Laplace smoothing
     }
   }
 
@@ -1190,6 +1188,160 @@ public class WikipediaExperiment extends AbstractExperiment {
           writers.get(predictionType + "PAIRS").close();
           writers.get(predictionType + "PATHS").close();
         }
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    } else if (args[3].startsWith("choicerankEval=")) {
+      String mode = args[3].split("=")[1];
+      we.loadEdgeWeights(modelId);
+      String f = "/home/berend/datasets/wikipedia_clickstream/2016_03_en_clickstream.tsv.gz";
+      try (BufferedReader br = new BufferedReader(new InputStreamReader(new GZIPInputStream(new FileInputStream(f))));
+          PrintWriter out = new PrintWriter(String.format("%s.out", mode))) {
+        String line, currentArticle = "";
+        int totalClicks = 0;
+        Map<Integer, Integer> etalonNeighbors = new HashMap<>();
+        while ((line = br.readLine()) != null) {
+          String parts[] = line.split("\t");
+          if (!parts[2].equals("link")) {
+            continue;
+          }
+          Integer from = we.g.getNodeIdByLabel(parts[0]);
+          Integer to = we.g.getNodeIdByLabel(parts[1]);
+          if (!currentArticle.equals(parts[0])) {
+            if (etalonNeighbors.size() > 0) {
+              Integer target = we.g.getNodeIdByLabel(currentArticle);
+              if (target != null) {
+                int[] neighborhood = we.g.getOutLinks(target);
+                int numOfNeighbors = neighborhood[0];
+                double[] probs = we.g.getWeights(target);
+                if (mode.equals("jaccard")) {
+                  probs = we.calculateJaccardScores(target);
+                } else if (mode.equals("pagerank")) {
+                  probs = we.calculatePageRankScores(target);
+                } else if (mode.equals("popularity")) {
+                  probs = we.calculatePopularityScores(target);
+                } else if (mode.equals("degree")) {
+                  probs = we.calculateIndegreeScores(target);
+                } // XXX add uniform and random
+
+                int[] sort = Utils.stableSort(probs);
+                Map<Integer, double[]> sortedPredictions = new HashMap<>();
+                for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
+                  if (sort[i] > 0) {
+                    sortedPredictions.put(neighborhood[sort[i]], new double[] { ++rank, probs[sort[i]] });
+                  }
+                }
+
+                double[] etalonTransitions = new double[probs.length];
+                for (int i = 1; i <= numOfNeighbors; ++i) {
+                  Integer freq = etalonNeighbors.getOrDefault(neighborhood[i], 0);
+                  etalonTransitions[i] = freq / totalClicks;
+                }
+                sort = Utils.stableSort(etalonTransitions);
+                Map<Integer, double[]> sortedEtalons = new HashMap<>();
+                for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
+                  if (sort[i] > 0) {
+                    sortedEtalons.put(neighborhood[sort[i]], new double[] { ++rank, etalonTransitions[sort[i]] });
+                  }
+                }
+
+                double kl = 0, rmse = 0, maxPredicted = 0, maxEtalon = 0, rankDisplacement = 0;
+                int argmaxPrediction = -1, argmaxEtalon = -1;
+                for (Entry<Integer, double[]> e : sortedEtalons.entrySet()) {
+                  double[] preds = sortedPredictions.get(e.getKey());
+                  double etalonProb = e.getValue()[1];
+                  if (preds[1] > maxPredicted) {
+                    argmaxPrediction = e.getKey();
+                  }
+                  rankDisplacement += Math.abs(e.getValue()[0] - preds[0]);
+                  if (etalonProb > 0) {
+                    kl += etalonProb * Math.log(etalonProb / preds[1]);
+                    rmse += Math.pow(etalonProb - preds[1], 2.0);
+                    if (etalonProb > maxEtalon) {
+                      argmaxEtalon = e.getKey();
+                    }
+                  }
+                }
+                rmse = Math.sqrt(rmse / numOfNeighbors);
+                rankDisplacement /= Math.pow(numOfNeighbors, 2.0);
+                int match = argmaxPrediction == argmaxEtalon ? 1 : 0;
+                out.format("%s\t%d\t%.5f\t%.5f\t%d\t%.5f\n", currentArticle, numOfNeighbors, kl, rmse, match, rankDisplacement);
+                out.flush();
+              }
+            }
+            totalClicks = 0;
+            currentArticle = parts[0];
+            etalonNeighbors = new HashMap<>();
+          }
+          if (from != null && to != null) {
+            int clicks = Integer.parseInt(parts[3]);
+            totalClicks += clicks;
+            etalonNeighbors.put(to, clicks);
+          }
+        }
+
+        if (etalonNeighbors.size() > 0) {
+          Integer target = we.g.getNodeIdByLabel(currentArticle);
+          if (target != null) {
+            int[] neighborhood = we.g.getOutLinks(target);
+            int numOfNeighbors = neighborhood[0];
+            double[] probs = we.g.getWeights(target);
+            if (mode.equals("jaccard")) {
+              probs = we.calculateJaccardScores(target);
+            } else if (mode.equals("pagerank")) {
+              probs = we.calculatePageRankScores(target);
+            } else if (mode.equals("popularity")) {
+              probs = we.calculatePopularityScores(target);
+            } else if (mode.equals("degree")) {
+              probs = we.calculateIndegreeScores(target);
+            } // XXX add uniform and random
+
+            int[] sort = Utils.stableSort(probs);
+            Map<Integer, double[]> sortedPredictions = new HashMap<>();
+            for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
+              if (sort[i] > 0) {
+                sortedPredictions.put(neighborhood[sort[i]], new double[] { ++rank, probs[sort[i]] });
+              }
+            }
+
+            double[] etalonTransitions = new double[probs.length];
+            for (int i = 1; i <= numOfNeighbors; ++i) {
+              Integer freq = etalonNeighbors.getOrDefault(neighborhood[i], 0);
+              etalonTransitions[i] = freq / totalClicks;
+            }
+            sort = Utils.stableSort(etalonTransitions);
+            Map<Integer, double[]> sortedEtalons = new HashMap<>();
+            for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
+              if (sort[i] > 0) {
+                sortedEtalons.put(neighborhood[sort[i]], new double[] { ++rank, etalonTransitions[sort[i]] });
+              }
+            }
+
+            double kl = 0, rmse = 0, maxPredicted = 0, maxEtalon = 0, rankDisplacement = 0;
+            int argmaxPrediction = -1, argmaxEtalon = -1;
+            for (Entry<Integer, double[]> e : sortedEtalons.entrySet()) {
+              double[] preds = sortedPredictions.get(e.getKey());
+              double etalonProb = e.getValue()[1];
+              if (preds[1] > maxPredicted) {
+                argmaxPrediction = e.getKey();
+              }
+              rankDisplacement += Math.abs(e.getValue()[0] - preds[0]);
+              if (etalonProb > 0) {
+                kl += etalonProb * Math.log(etalonProb / preds[1]);
+                rmse += Math.pow(etalonProb - preds[1], 2.0);
+                if (etalonProb > maxEtalon) {
+                  argmaxEtalon = e.getKey();
+                }
+              }
+            }
+            rmse = Math.sqrt(rmse / numOfNeighbors);
+            rankDisplacement /= Math.pow(numOfNeighbors, 2.0);
+            int match = argmaxPrediction == argmaxEtalon ? 1 : 0;
+            out.format("%s\t%d\t%.5f\t%.5f\t%d\t%.5f\n", currentArticle, numOfNeighbors, kl, rmse, match, rankDisplacement);
+            out.flush();
+          }
+        }
+
       } catch (IOException e) {
         e.printStackTrace();
       }
