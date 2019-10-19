@@ -1191,8 +1191,9 @@ public class WikipediaExperiment extends AbstractExperiment {
       } catch (IOException e) {
         e.printStackTrace();
       }
-    } else if (args[3].startsWith("choicerankEval=")) {
-      String mode = args[3].split("=")[1];
+    } else if (args[3].startsWith("choicerankEval")) {
+      String mode = args[3].split("_")[1].split("=")[0];
+      System.err.println(mode);
       we.loadEdgeWeights(modelId);
       String f = "/home/berend/datasets/wikipedia_clickstream/2016_03_en_clickstream.tsv.gz";
       try (BufferedReader br = new BufferedReader(new InputStreamReader(new GZIPInputStream(new FileInputStream(f))));
