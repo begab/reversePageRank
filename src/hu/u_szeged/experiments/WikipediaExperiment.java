@@ -1029,7 +1029,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       we.navigate("Szeged", "Jane_Goodall");
     }
 
-    if (args[3].startsWith("eval=") || args[3].toLowerCase().startsWith("learn=")) {
+    if (args[3].startsWith("eval") || args[3].toLowerCase().startsWith("learn=")) {
       boolean modelNeedsToBeLoaded = args[3].startsWith("eval");
       Random r = new Random(1l);
       String mode = args[3].split("_")[1].split("=")[0];
