@@ -1039,7 +1039,7 @@ public class WikipediaExperiment extends AbstractExperiment {
 
     if (args[3].startsWith("eval") || args[3].toLowerCase().startsWith("learn=")) {
       boolean modelNeedsToBeLoaded = args[3].startsWith("eval");
-      Random r = new Random(1l);
+      Random r = new Random((long) modelId);
       String mode = args[3].split("_")[1].split("=")[0];
       System.err.println(mode);
       String choicerankGraphFile = "./choicerank_wiki_03_2016edges.output.gz";
