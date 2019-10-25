@@ -1108,12 +1108,6 @@ public class WikipediaExperiment extends AbstractExperiment {
             probs = we.calculatePopularityScores(e.getKey());
           } else if (mode.equals("degree")) {
             probs = we.calculateIndegreeScores(e.getKey());
-          } else if (mode.equals("uniform")) {
-            probs = new double[probs.length];
-            for (int i = 1; i <= N; ++i) {
-              probs[i] = 1.0d / N;
-              probs[0] += probs[i];
-            }
           } else if (mode.equals("random")) {
             probs = new double[probs.length];
             for (int i = 1; i <= N; ++i) {
