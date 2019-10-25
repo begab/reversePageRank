@@ -591,14 +591,21 @@ public class WikipediaExperiment extends AbstractExperiment {
     }
   }
 
-  private void loadEdgeWeights(int modelId) {
+  private boolean loadEdgeWeights(int modelId) {
+    return loadEdgeWeights(modelId, false);
+  }
+
+  private boolean loadEdgeWeights(int modelId, boolean interactive) {
     File serializedWeights = null;
     if (modelId == -1) {
       serializedWeights = new File(String.format("%s/%s%s%sFinalWeights.ser", dir, lang, date, learner.regularizationToString()));
     } else {
       serializedWeights = new File(String.format("%s/%s%s%sWeights_model%d.ser", dir, lang, date, learner.regularizationToString(), modelId));
     }
-    while (!serializedWeights.exists()) {
+    if (!interactive && !serializedWeights.exists()) {
+      return false;
+    }
+    while (interactive && !serializedWeights.exists()) {
       System.err.format("The desired model file (i.e. %s) does not exists. The program exits now.\n", serializedWeights.getAbsolutePath());
       System.err.format(
           "Please type in either\n-a valid path to a file storing edge weights\n-'q' if you wish to quit\n-'learn' if you want to learn a new model.\n>>");
@@ -617,10 +624,11 @@ public class WikipediaExperiment extends AbstractExperiment {
     } catch (ClassNotFoundException | IOException e) {
       System.err.format("%s\nThe graph has to be built from scratch.", e.getLocalizedMessage());
     }
+    return true;
   }
 
   public void query(int modelId, boolean relativize) {
-    loadEdgeWeights(modelId);
+    loadEdgeWeights(modelId, true);
     String query = "";
     System.err.print(">>");
     while (!(query = scanner.nextLine().replace(' ', '_').trim()).equals("q")) {
@@ -1040,7 +1048,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       } else if (mode.equals("invPR")) {
         boolean successfullyLoaded = false;
         if (modelNeedsToBeLoaded) {
-          we.loadEdgeWeights(modelId);
+          successfullyLoaded = we.loadEdgeWeights(modelId);
         }
         if (!successfullyLoaded) {
           we.learner.learnEdgeWeights(modelId);
