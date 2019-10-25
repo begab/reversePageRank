@@ -1212,7 +1212,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       }
 
       System.err.format("%d and %d etalon and predicted strong pairs resp.", mutuallyStrongPredictions.size(), mutuallyStrongEtalons.size());
-      try (PrintWriter out = new PrintWriter(String.format("strong_pairs_%s.out", mode))) {
+      try (PrintWriter out = new PrintWriter(String.format("strong_pairs_%s_%d.out", mode, modelId))) {
         for (Entry<Integer, Integer> predictedStrongs : mutuallyStrongPredictions.entrySet()) {
           String from = we.g.getNodeLabel(predictedStrongs.getKey());
           String to = we.g.getNodeLabel(predictedStrongs.getValue());
