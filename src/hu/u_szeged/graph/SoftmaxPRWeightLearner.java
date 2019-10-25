@@ -16,7 +16,7 @@ public class SoftmaxPRWeightLearner extends PRWeightLearner {
   }
 
   public SoftmaxPRWeightLearner(double[] prs, OwnGraph g, double teleportProb, Set<Integer> favoredNodeIds) {
-    super(prs, g, teleportProb, true, favoredNodeIds);
+    super(prs, g, teleportProb, favoredNodeIds);
   }
 
   public void getValueGradient(double[] buffer) {

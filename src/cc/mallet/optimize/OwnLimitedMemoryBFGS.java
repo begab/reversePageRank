@@ -322,11 +322,7 @@ public class OwnLimitedMemoryBFGS extends LimitedMemoryBFGS {
     for (int i = 0, edgeIndex = 0; i < og.getNumOfNodes(); ++i) {
       int[] neighbors = og.getOutLinks(i);
       double[] weights = Arrays.copyOf(og.getWeights(i), og.getNumOfNeighbors(i) + 1);
-      if (((PRWeightLearner) optimizable).getSoftmax()) {
-        Utils.softmaxNormalize(weights, neighbors[0]);
-      } else {
-        og.normalizeWeights(weights, neighbors[0]);
-      }
+      Utils.softmaxNormalize(weights, neighbors[0]);
       for (int n = 1; n <= neighbors[0]; ++n, ++edgeIndex) {
         // System.err.format("Edge %d weight set to %f\n", edgeIndex, VisualizePageRankLearn.UNIT_EDGE_WIDTH * weights[n]);
         boolean below = weights[n] * neighbors[0] < 1;

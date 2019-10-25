@@ -24,8 +24,6 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     NONE, ENTROPY, ORACLE
   };
 
-  private boolean softmax;
-
   protected double[] prStar;
   protected double[] prInitial; // let's keep the original (i.e. unweighted) pagerank scores as well
   protected double[] prActual;
@@ -38,36 +36,27 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
 
   protected abstract void actualizePageRankValues();
 
-  protected double[] projectVector(double[] vec) {
-    return vec;
+  public PRWeightLearner(double[] prs, OwnGraph g) {
+    this(prs, g, PageRankCalculator.DEFAULT_TELEPORT, null);
   }
 
-  public PRWeightLearner(double[] prs, OwnGraph g, boolean softmaxNorm) {
-    this(prs, g, PageRankCalculator.DEFAULT_TELEPORT, softmaxNorm, null);
+  public PRWeightLearner(double[] prs, OwnGraph g, double teleportProb) {
+    this(prs, g, teleportProb, null);
   }
 
-  public PRWeightLearner(double[] prs, OwnGraph g, double teleportProb, boolean softmaxNorm) {
-    this(prs, g, teleportProb, softmaxNorm, null);
-  }
-
-  public PRWeightLearner(double[] prs, OwnGraph g, double teleportProb, boolean softmaxNorm, Set<Integer> favoredNodeIds) {
+  public PRWeightLearner(double[] prs, OwnGraph g, double teleportProb, Set<Integer> favoredNodeIds) {
     log = System.err;
     prStar = prs;
     graph = g;
-    softmax = softmaxNorm;
     teleportProbability = teleportProb;
     prc = new PageRankCalculator(teleportProbability);
     prc.setFavoredNodes(favoredNodeIds);
-    prInitial = prc.calculatePageRank(graph, softmax);
-  }
-
-  public boolean getSoftmax() {
-    return softmax;
+    prInitial = prc.calculatePageRank(graph, true);
   }
 
   public double[] getActualPRvalues() {
     if (prActual == null) {
-      prActual = prc.calculatePageRank(graph, softmax);
+      prActual = prc.calculatePageRank(graph, true);
     }
     return prActual;
   }
@@ -99,6 +88,10 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     return prStar[i];
   }
 
+  public double[] learnEdgeWeights(int numOfInitializations) {
+    return learnEdgeWeights(numOfInitializations, false, false)[0];
+  }
+
   public double[] learnEdgeWeights(int numOfInitializations, boolean useAveragedModel) {
     return learnEdgeWeights(numOfInitializations, false, useAveragedModel)[0];
   }
@@ -116,15 +109,15 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
       } else {
         graph.initWeights(WeightingStrategy.RAND);
       }
+      if (!returnAllParametersLearned && !averageModels && i != numOfInitializations - 1) {
+        // this happens when a single model is needed to be trained
+        continue;
+      }
       long time = System.currentTimeMillis();
       double[] objVals = learnEdgeWeights();
       toReturn[toReturn.length - 1][i] = (System.currentTimeMillis() - time) / 1000.0d;
       toReturn[toReturn.length - 1][numOfInitializations] += toReturn[toReturn.length - 1][i];
-      if (softmax) {
-        graph.softmaxNormalizeWeights();
-      } else {
-        graph.normalizeWeights();
-      }
+      graph.softmaxNormalizeWeights();
       if (extensiveSerialization) {
         serializeWeights(String.format("%s_model%d.ser", serializationPrefix, i));
       }

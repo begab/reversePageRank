@@ -221,6 +221,37 @@ public class OwnGraph implements Serializable, Cloneable {
     }
   }
 
+  public void setEdgeWeight(int from, int to, double newWeight) {
+    updateEdgeWeight(from, to, newWeight, true);
+  }
+
+  public void updateEdgeWeight(int from, int to, double newWeight) {
+    updateEdgeWeight(from, to, newWeight, false);
+  }
+
+  public void updateEdgeWeight(int from, int to, double newWeight, boolean replaceOld) {
+    /**
+     * Updates the weight for the edge (from, to) with the weight given in newWeight.
+     */
+    if (from >= numOfNodes || to >= numOfNodes) {
+      System.err.println("The edge for which the weight is to be set was not present in the graph previously.");
+      return;
+    }
+    double[] nodeWeights = weights[from];
+    int index = this.findNodeIndex(from, to);
+    if (index < 0) {
+      System.err.println("The edge for which the weight is to be set was not present in the graph previously.");
+      return;
+    }
+    if (replaceOld) {
+      nodeWeights[0] += (newWeight - nodeWeights[index]);
+      nodeWeights[index] = newWeight;
+    } else {
+      nodeWeights[0] += newWeight;
+      nodeWeights[index] += newWeight;
+    }
+  }
+
   public void initWeights(WeightingStrategy weightStrat) {
     for (int i = 0; i < getNumOfNodes(); ++i) {
       int[] neighs = getOutLinks(i);
@@ -257,6 +288,17 @@ public class OwnGraph implements Serializable, Cloneable {
 
   public boolean containsNode(String s) {
     return lookupForNodeId.containsKey(s);
+  }
+
+  public boolean containsEdge(String from, String to) {
+    return containsEdge(lookupForNodeId.getOrDefault(from, numOfNodes), lookupForNodeId.getOrDefault(to, numOfNodes));
+  }
+
+  public boolean containsEdge(int from, int to) {
+    if (from < numOfNodes && to < numOfNodes) {
+      return findNodeIndex(from, to) >= 0;
+    }
+    return false;
   }
 
   public Integer getNodeIdByLabel(String label) {

@@ -10,22 +10,19 @@ import java.io.ObjectInputStream;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.net.URLDecoder;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Random;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
 
 import hu.u_szeged.graph.OwnGraph;
-import hu.u_szeged.graph.PRWeightLearner.RegularizationType;
 import hu.u_szeged.graph.SoftmaxPRWeightLearner;
 import hu.u_szeged.utils.Utils;
 
@@ -33,7 +30,6 @@ public class WikipediaExperiment extends AbstractExperiment {
 
   private String dir, lang, date;
   private Scanner scanner;
-  private static String[] PREDICTION_APPROACHES;
 
   public WikipediaExperiment(String directory, String language, String d) {
     this(directory, language, d, true);
@@ -60,7 +56,6 @@ public class WikipediaExperiment extends AbstractExperiment {
    * @param readEtalonNodeWeights
    */
   public void init(boolean readEtalonNodeWeights) {
-    PREDICTION_APPROACHES = new String[] { "softmax_learning", "jaccard", "pagerank", "popularity", "indegree" }; // "pmi"
     File serializedGraphFile = new File(String.format("%s/%s%sGraph.ser", dir, lang, date));
     File serializedEtalonsFile = readEtalonNodeWeights ? new File(String.format("%s/%s%sEtalon.ser", dir, lang, date)) : null;
     readSerializedGraph(serializedGraphFile, serializedEtalonsFile);
@@ -317,6 +312,22 @@ public class WikipediaExperiment extends AbstractExperiment {
     }
   }
 
+  private void loadChoicerankWeights(String gsPath) {
+    try (BufferedReader br = new BufferedReader(new InputStreamReader(new GZIPInputStream(new FileInputStream(gsPath))))) {
+      String line;
+      while ((line = br.readLine()) != null) {
+        String parts[] = line.split("\t");
+        Integer from = g.getNodeIdByLabel(parts[0]);
+        Integer to = g.getNodeIdByLabel(parts[1]);
+        double weight = Double.parseDouble(parts[2]);
+        g.setEdgeWeight(from, to, weight);
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+
+  }
+
   /**
    * Sets graph weights to the Jaccard similarities between nodes.
    */
@@ -332,6 +343,18 @@ public class WikipediaExperiment extends AbstractExperiment {
     g.normalizeWeights();
   }
 
+  private double[] normalize(double[] d) {
+    double sum = 0.0d;
+    for (double v : d) {
+      sum += v;
+    }
+    double[] normalized = new double[d.length];
+    for (int i = 0; i < d.length; ++i) {
+      normalized[i] = d[i] / sum;
+    }
+    return normalized;
+  }
+
   private double[] calculateJaccardScores(int target) {
     int[] neighs = g.getOutLinks(target);
     double[] jaccards = new double[neighs[0]];
@@ -340,7 +363,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       jaccards[j - 1] = Utils.determineOverlap(neighs, outLinksForNeighbor);
       jaccards[j - 1] /= (double) (neighs[0] + outLinksForNeighbor[0] - jaccards[j - 1]);
     }
-    return jaccards;
+    return normalize(jaccards);
   }
 
   private double[] calculatePageRankScores(int target) {
@@ -349,7 +372,7 @@ public class WikipediaExperiment extends AbstractExperiment {
     for (int j = 1; j <= neighs[0]; ++j) {
       pageranks[j - 1] = learner.getInitialPRvalue(neighs[j]);
     }
-    return pageranks;
+    return normalize(pageranks);
   }
 
   private double[] calculatePopularityScores(int target) {
@@ -358,7 +381,7 @@ public class WikipediaExperiment extends AbstractExperiment {
     for (int j = 1; j <= neighs[0]; ++j) {
       relativeClicks[j - 1] = etalonDistr[neighs[j]];
     }
-    return relativeClicks;
+    return normalize(relativeClicks);
   }
 
   private double[] calculatePMIScores(int target) {
@@ -386,7 +409,7 @@ public class WikipediaExperiment extends AbstractExperiment {
     for (int j = 1; j <= neighs[0]; ++j) {
       indegrees[j - 1] = g.getIndegree(neighs[j]);
     }
-    return indegrees;
+    return normalize(indegrees);
   }
 
   public void runBaselines() {
@@ -499,8 +522,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       rankSimilarities(neighs, calculatePageRankScores(nodeId), k, "pagerank");
       rankSimilarities(neighs, calculatePopularityScores(nodeId), k, "clicks");
       rankSimilarities(neighs, calculateIndegreeScores(nodeId), k, "indegree");
-      if (neighs[0] < 100) { // otherwise it would likely to take to long to
-                             // wait for it in a demo application
+      if (neighs[0] < 100) { // otherwise it would likely to take to long to wait for it in a demo application
         rankSimilarities(neighs, calculatePMIScores(nodeId), k, "PMI");
       }
     }
@@ -783,8 +805,7 @@ public class WikipediaExperiment extends AbstractExperiment {
     for (int i = 0; i < distances.length; ++i) {
       if (distances[i] < 9) {
         if (distances[i] == -1) {
-          denominator[9] += scores[i]; // the last index is reserved for
-                                       // unreachable nodes
+          denominator[9] += scores[i]; // the last index is reserved for unreachable nodes
         } else {
           denominator[distances[i]] += scores[i];
         }
@@ -995,23 +1016,10 @@ public class WikipediaExperiment extends AbstractExperiment {
       modelId = Integer.parseInt(args[3].split("=")[1]);
     }
 
-    double regularizationWeight = 0;
-    RegularizationType rt = RegularizationType.NONE;
-    if (args.length > 4) {
-      String[] regularizationParts = args[4].split("=");
-      regularizationWeight = regularizationParts.length > 1 ? Double.parseDouble(regularizationParts[1]) : 0.0d;
-      if (regularizationWeight > 0 && regularizationParts[0].equalsIgnoreCase("entropy")) {
-        rt = RegularizationType.ENTROPY;
-      } else if (regularizationWeight > 0 && regularizationParts[0].equalsIgnoreCase("oracle")) {
-        rt = RegularizationType.ORACLE;
-      }
-    }
-    String regularization = String.format("_%s_%.8f", rt.toString(), regularizationWeight);
-    System.err.println("Regularization: " + regularization);
     String[] dates = args[2].split(":");
     String trainDate = dates[0], testDate = dates.length > 1 ? dates[1] : null;
     WikipediaExperiment we = new WikipediaExperiment(args[0], args[1], trainDate);
-    we.learner.setRegularization(regularizationWeight, rt);
+
     we.setExtensiveSerialization(args.length > 5 ? Boolean.parseBoolean(args[5]) : false);
     if (args[3].toLowerCase().startsWith("learn=")) {
       we.learnWeights(modelId, true);
@@ -1019,330 +1027,196 @@ public class WikipediaExperiment extends AbstractExperiment {
       we.query(modelId, args.length > 6 ? Boolean.parseBoolean(args[6]) : false);
     } else if (args[3].equalsIgnoreCase("navigate")) {
       we.navigate("Szeged", "Jane_Goodall");
-    } else if (args[3].startsWith("evaluate=")) {
-      System.err.println("[LOG]: Evaluation starts at " + new Date());
-      we.loadEdgeWeights(modelId);
-      System.err.println("[LOG]: Weights loaded at " + new Date());
-      // we.printStrongConnections(String.format("%s%s_%d_strong_pairs.txt", args[1], trainDate, modelId));
-      // System.err.println("[LOG]: Strong connections printed at " + new Date());
+    }
 
-      // for (String predictionType : PREDICTION_APPROACHES) {
-      // if (predictionType.equals("pmi")) {
-      // continue; // these are way too slow approaches to deal with
-      // }
-      // String[][] predictions = we.predictForTestCase("Macska", predictionType);
-      // for (int i = 0; i < predictions.length; ++i) {
-      // System.err.print(String.format("%s_%s_%s\t%d", predictionType, i == 0 ? "ORDERING" : "PATH", "Macska", predictions[i].length));
-      // for (String v : predictions[i]) {
-      // System.err.print(String.format("\t%s", v));
-      // }
-      // System.err.println();
-      // }
-      // }
-
-      Map<String, List<String>> testCases = new HashMap<>();
-      try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream("2016_03_en_distr.txt")))) {
-        String line;
-        List<String> currentRanking = new LinkedList<>();
-        while ((line = br.readLine()) != null) {
-          String[] parts = line.split("\t");
-          if (line.startsWith("WIKI_TITLE")) {
-            testCases.put(parts[1], currentRanking);
-            currentRanking = new LinkedList<>();
-          } else {
-            currentRanking.add(parts[0]);
-            currentRanking.add(parts[2]);
-          }
-        }
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-
-      try {
-        Map<String, PrintWriter> writers = new HashMap<>();
-        writers.put("etalonPAIRS", new PrintWriter(String.format("%s%s_etalon_strong_pairs.txt", args[1], trainDate)));
-        writers.put("etalonPATHS", new PrintWriter(String.format("%s%s_etalon_sample_paths.txt", args[1], trainDate)));
-        writers.put("etalonORDERINGS", new PrintWriter(String.format("%s%s_etalon_ordering.txt", args[1], trainDate)));
-        for (String predictionType : PREDICTION_APPROACHES) {
-          writers.put(predictionType + "EVAL",
-              new PrintWriter(String.format("%s%s%s_%d%s_eval.txt", args[1], trainDate, predictionType, modelId, regularization)));
-          writers.put(predictionType + "ORDERINGS",
-              new PrintWriter(String.format("%s%s%s_%d%s_ordering.txt", args[1], trainDate, predictionType, modelId, regularization)));
-          writers.put(predictionType + "PAIRS",
-              new PrintWriter(String.format("%s%s%s_%d%s_strong_pairs.txt", args[1], trainDate, predictionType, modelId, regularization)));
-          writers.put(predictionType + "PATHS",
-              new PrintWriter(String.format("%s%s%s_%d%s_sample_paths.txt", args[1], trainDate, predictionType, modelId, regularization)));
-        }
-
-        for (Entry<String, List<String>> tc : testCases.entrySet()) {
-          String mostProbableNextPage = tc.getValue().size() > 0 ? tc.getValue().get(0) : "";
-          List<String> reverseTestCase = testCases.getOrDefault(mostProbableNextPage, new LinkedList<>());
-          if (reverseTestCase.size() > 0 && reverseTestCase.get(0).equals(tc.getKey()) && we.g.getNodeIdByLabel(mostProbableNextPage) != null
-              && we.g.getNodeIdByLabel(tc.getKey()) != null) {
-            String from = tc.getKey(), to = mostProbableNextPage;
-            if (tc.getKey().compareTo(mostProbableNextPage) > 0) {
-              from = mostProbableNextPage;
-              to = tc.getKey();
-            }
-            writers.get("etalonPAIRS").format("%s\t%s\t%d\t%d\n", from, to, we.g.getOutDegree(we.g.getNodeIdByLabel(from)),
-                we.g.getOutDegree(we.g.getNodeIdByLabel(to)));
-            writers.get("etalonPAIRS").flush();
-          }
-
-          boolean diverseEnough = tc.getValue().size() >= 200; // a page is defined as diverse if it has at least 200/2=100 out-links
-          if (diverseEnough) {
-            PrintWriter writer = writers.get("etalonORDERINGS");
-            writer.print(String.format("%s\t%d", tc.getKey(), tc.getValue().size()));
-            for (String v : tc.getValue()) {
-              writer.print(String.format("\t%s", v));
-            }
-            writer.println();
-            writer.flush();
-
-            List<String> steps = new ArrayList<>(2 * 6); // we want to generate at most 6 steps
-            Set<String> alreadyVisited = new HashSet<>();
-            alreadyVisited.add(tc.getKey());
-            String nextLink = tc.getValue().get(0);
-            steps.add(nextLink);
-            steps.add(tc.getValue().get(1)); // add the score as well
-            alreadyVisited.add(nextLink);
-            for (int step = 1; step < 6; ++step) {
-              List<String> neighbors = testCases.get(nextLink);
-              if (neighbors == null) {
-                break;
-              }
-              Iterator<String> it = neighbors.iterator();
-              while (it.hasNext()) {
-                String n = it.next();
-                String score = it.next(); // the size of neighbors is always even and we are interested in every 2nd value
-                if (alreadyVisited.add(n)) {
-                  nextLink = n;
-                  steps.add(nextLink);
-                  steps.add(score);
-                  break;
-                }
-              }
-            }
-            writer = writers.get("etalonPATHS");
-            writer.print(String.format("%s\t%d", tc.getKey(), steps.size()));
-            for (String nn : steps) {
-              writer.print(String.format("\t%s", nn));
-            }
-            writer.println();
-            writer.flush();
-          }
-
-          for (String predictionType : PREDICTION_APPROACHES) {
-            if (predictionType.equals("pmi")) {
-              continue; // these are way too slow approaches to deal with
-            }
-            String[][] predictions = we.predictForTestCase(tc.getKey(), predictionType);
-            int numOfOutLinks = predictions[0].length / 2, minRank = -1;
-
-            String predictedPage = predictions[0].length > 0 ? predictions[0][0] : "";
-            String[][] reversePredictions = we.predictForTestCase(predictedPage, predictionType);
-            int numOfReverseOutLinks = reversePredictions[0].length / 2;
-            if (reversePredictions[0].length > 0 && reversePredictions[0][0].equals(tc.getKey()) && we.g.getNodeIdByLabel(predictedPage) != null
-                && we.g.getNodeIdByLabel(tc.getKey()) != null) {
-              String from = tc.getKey(), to = predictedPage;
-              int linksFrom = numOfOutLinks, linksTo = numOfReverseOutLinks;
-              if (tc.getKey().compareTo(predictedPage) > 0) {
-                from = predictedPage;
-                to = tc.getKey();
-                linksFrom = numOfReverseOutLinks;
-                linksTo = numOfOutLinks;
-              }
-              PrintWriter writer = writers.get(predictionType + "PAIRS");
-              writer.format("%s\t%s\t%d\t%d\n", from, to, linksFrom, linksTo);
-              writer.flush();
-            }
-
-            for (int rank = 0; rank < numOfOutLinks; ++rank) {
-              if (predictions[0][2 * rank].equals(mostProbableNextPage)) { // only every 2nd element is for an article title
-                minRank = rank + 1;
-                break;
-              }
-            }
-            if (minRank > 0) {
-              PrintWriter evalWriter = writers.get(predictionType + "EVAL");
-              evalWriter.format("%s\t%d\t%d\n", tc.getKey(), numOfOutLinks, minRank);
-              evalWriter.flush();
-            }
-            for (int i = 0; diverseEnough && i < predictions.length; ++i) {
-              PrintWriter writer = writers.get(String.format("%s%s", predictionType, i == 0 ? "ORDERINGS" : "PATHS"));
-              writer.print(String.format("%s\t%d", tc.getKey(), predictions[i].length));
-              for (String v : predictions[i]) {
-                writer.print(String.format("\t%s", v));
-              }
-              writer.println();
-              writer.flush();
-            }
-          }
-        }
-        writers.get("etalonPAIRS").close();
-        writers.get("etalonPATHS").close();
-        writers.get("etalonORDERINGS").close();
-        for (String predictionType : PREDICTION_APPROACHES) {
-          writers.get(predictionType + "EVAL").close();
-          writers.get(predictionType + "ORDERINGS").close();
-          writers.get(predictionType + "PAIRS").close();
-          writers.get(predictionType + "PATHS").close();
-        }
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-    } else if (args[3].startsWith("extendedEval")) {
+    if (args[3].startsWith("eval=") || args[3].toLowerCase().startsWith("learn=")) {
+      boolean modelNeedsToBeLoaded = args[3].startsWith("eval");
+      Random r = new Random(1l);
       String mode = args[3].split("_")[1].split("=")[0];
       System.err.println(mode);
-      we.loadEdgeWeights(modelId);
+      String choicerankGraphFile = "./choicerank_wiki_03_2016edges.output.gz";
+      if (mode.equals("choicerank")) {
+        we.loadChoicerankWeights(choicerankGraphFile);
+      } else if (mode.equals("invPR")) {
+        boolean successfullyLoaded = false;
+        if (modelNeedsToBeLoaded) {
+          we.loadEdgeWeights(modelId);
+        }
+        if (!successfullyLoaded) {
+          we.learner.learnEdgeWeights(modelId);
+        }
+      }
+
       String f = "/home/berend/datasets/wikipedia_clickstream/2016_03_en_clickstream.tsv.gz";
-      try (BufferedReader br = new BufferedReader(new InputStreamReader(new GZIPInputStream(new FileInputStream(f))));
-          PrintWriter out = new PrintWriter(String.format("eval_%s.out", mode))) {
-        String line, currentArticle = "";
-        int totalClicks = 0;
-        Map<Integer, Integer> etalonNeighbors = new HashMap<>();
+      Map<Integer, Map<Integer, Integer>> etalonNeighbors = new HashMap<>();
+      Map<Integer, Integer> totalOutclicks = new HashMap<>();
+      try (BufferedReader br = new BufferedReader(new InputStreamReader(new GZIPInputStream(new FileInputStream(f))));) {
+        String line;
+        int cntr = 0;
         while ((line = br.readLine()) != null) {
+          if (++cntr % 500000 == 0) {
+            System.err.println(cntr + " many clickstream lines read in...");
+          }
           String parts[] = line.split("\t");
           if (!parts[2].equals("link")) {
             continue;
           }
           Integer from = we.g.getNodeIdByLabel(parts[0]);
           Integer to = we.g.getNodeIdByLabel(parts[1]);
-          if (!currentArticle.equals(parts[0])) {
-            if (etalonNeighbors.size() > 0) {
-              Integer target = we.g.getNodeIdByLabel(currentArticle);
-              if (target != null) {
-                int[] neighborhood = we.g.getOutLinks(target);
-                int numOfNeighbors = neighborhood[0];
-                double[] probs = we.g.getWeights(target);
-                if (mode.equals("jaccard")) {
-                  probs = we.calculateJaccardScores(target);
-                } else if (mode.equals("pagerank")) {
-                  probs = we.calculatePageRankScores(target);
-                } else if (mode.equals("popularity")) {
-                  probs = we.calculatePopularityScores(target);
-                } else if (mode.equals("degree")) {
-                  probs = we.calculateIndegreeScores(target);
-                } // XXX add uniform and random
-
-                int[] sort = Utils.stableSort(probs);
-                Map<Integer, double[]> sortedPredictions = new HashMap<>();
-                for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
-                  if (sort[i] > 0) {
-                    sortedPredictions.put(neighborhood[sort[i]], new double[] { ++rank, probs[sort[i]] });
-                  }
-                }
-
-                double[] etalonTransitions = new double[probs.length];
-                for (int i = 1; i <= numOfNeighbors; ++i) {
-                  Integer freq = etalonNeighbors.getOrDefault(neighborhood[i], 0);
-                  etalonTransitions[i] = freq / totalClicks;
-                }
-                sort = Utils.stableSort(etalonTransitions);
-                Map<Integer, double[]> sortedEtalons = new HashMap<>();
-                for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
-                  if (sort[i] > 0) {
-                    sortedEtalons.put(neighborhood[sort[i]], new double[] { ++rank, etalonTransitions[sort[i]] });
-                  }
-                }
-
-                double kl = 0, rmse = 0, maxPredicted = 0, maxEtalon = 0, rankDisplacement = 0;
-                int argmaxPrediction = -1, argmaxEtalon = -1;
-                for (Entry<Integer, double[]> e : sortedEtalons.entrySet()) {
-                  double[] preds = sortedPredictions.get(e.getKey());
-                  double etalonProb = e.getValue()[1];
-                  if (preds[1] > maxPredicted) {
-                    argmaxPrediction = e.getKey();
-                  }
-                  rankDisplacement += Math.abs(e.getValue()[0] - preds[0]);
-                  if (etalonProb > 0) {
-                    kl += etalonProb * Math.log(etalonProb / preds[1]);
-                    rmse += Math.pow(etalonProb - preds[1], 2.0);
-                    if (etalonProb > maxEtalon) {
-                      argmaxEtalon = e.getKey();
-                    }
-                  }
-                }
-                rmse = Math.sqrt(rmse / numOfNeighbors);
-                rankDisplacement /= Math.pow(numOfNeighbors, 2.0);
-                int match = argmaxPrediction == argmaxEtalon ? 1 : 0;
-                out.format("%s\t%d\t%.5f\t%.5f\t%d\t%.5f\n", currentArticle, numOfNeighbors, kl, rmse, match, rankDisplacement);
-                out.flush();
-              }
-            }
-            totalClicks = 0;
-            currentArticle = parts[0];
-            etalonNeighbors = new HashMap<>();
-          }
           if (from != null && to != null) {
-            int clicks = Integer.parseInt(parts[3]);
-            totalClicks += clicks;
-            etalonNeighbors.put(to, clicks);
+            if (we.g.containsEdge(from, to)) {
+              int clicks = Integer.parseInt(parts[3]);
+              etalonNeighbors.putIfAbsent(from, new HashMap<Integer, Integer>());
+              etalonNeighbors.get(from).put(to, clicks);
+              totalOutclicks.put(from, totalOutclicks.getOrDefault(from, 0) + clicks);
+            }
           }
         }
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+      System.err.println("===========" + etalonNeighbors.size() + "=============");
 
-        if (etalonNeighbors.size() > 0) {
-          Integer target = we.g.getNodeIdByLabel(currentArticle);
-          if (target != null) {
-            int[] neighborhood = we.g.getOutLinks(target);
-            int numOfNeighbors = neighborhood[0];
-            double[] probs = we.g.getWeights(target);
-            if (mode.equals("jaccard")) {
-              probs = we.calculateJaccardScores(target);
-            } else if (mode.equals("pagerank")) {
-              probs = we.calculatePageRankScores(target);
-            } else if (mode.equals("popularity")) {
-              probs = we.calculatePopularityScores(target);
-            } else if (mode.equals("degree")) {
-              probs = we.calculateIndegreeScores(target);
-            } // XXX add uniform and random
-
-            int[] sort = Utils.stableSort(probs);
-            Map<Integer, double[]> sortedPredictions = new HashMap<>();
-            for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
-              if (sort[i] > 0) {
-                sortedPredictions.put(neighborhood[sort[i]], new double[] { ++rank, probs[sort[i]] });
-              }
+      Map<Integer, Integer> mostProbablePredictedTransition = new HashMap<>();
+      Map<Integer, Integer> mostProbableEtalonTransition = new HashMap<>();
+      try (PrintWriter out = new PrintWriter(String.format("eval_%s_%d.out", mode, modelId))) {
+        out.write("article\tetalon_transition\tpredicted_transition\tN\tKL-divergence\tRMSE\tP@1\tMRR\tdisplacement\n");
+        for (Entry<Integer, Map<Integer, Integer>> e : etalonNeighbors.entrySet()) {
+          String currentArticle = we.g.getNodeLabel(e.getKey());
+          int[] neighborhood = we.g.getOutLinks(e.getKey());
+          int N = neighborhood[0];
+          double[] probs = we.g.getWeights(e.getKey());
+          if (mode.equals("invPR") || mode.equals("clickstream")) {
+            double[] tempProbs = new double[N + 1];
+            for (int i = 0; i < tempProbs.length; ++i) {
+              tempProbs[i] = probs[i];
             }
-
-            double[] etalonTransitions = new double[probs.length];
-            for (int i = 1; i <= numOfNeighbors; ++i) {
-              Integer freq = etalonNeighbors.getOrDefault(neighborhood[i], 0);
-              etalonTransitions[i] = freq / totalClicks;
+            probs = tempProbs;
+          } else if (mode.equals("jaccard")) {
+            probs = we.calculateJaccardScores(e.getKey());
+          } else if (mode.equals("pagerank")) {
+            probs = we.calculatePageRankScores(e.getKey());
+          } else if (mode.equals("popularity")) {
+            probs = we.calculatePopularityScores(e.getKey());
+          } else if (mode.equals("degree")) {
+            probs = we.calculateIndegreeScores(e.getKey());
+          } else if (mode.equals("uniform")) {
+            probs = new double[probs.length];
+            for (int i = 1; i <= N; ++i) {
+              probs[i] = 1.0d / N;
+              probs[0] += probs[i];
             }
-            sort = Utils.stableSort(etalonTransitions);
-            Map<Integer, double[]> sortedEtalons = new HashMap<>();
-            for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
-              if (sort[i] > 0) {
-                sortedEtalons.put(neighborhood[sort[i]], new double[] { ++rank, etalonTransitions[sort[i]] });
-              }
+          } else if (mode.equals("random")) {
+            probs = new double[probs.length];
+            for (int i = 1; i <= N; ++i) {
+              probs[i] = r.nextDouble();
+              probs[0] += probs[i];
             }
-
-            double kl = 0, rmse = 0, maxPredicted = 0, maxEtalon = 0, rankDisplacement = 0;
-            int argmaxPrediction = -1, argmaxEtalon = -1;
-            for (Entry<Integer, double[]> e : sortedEtalons.entrySet()) {
-              double[] preds = sortedPredictions.get(e.getKey());
-              double etalonProb = e.getValue()[1];
-              if (preds[1] > maxPredicted) {
-                argmaxPrediction = e.getKey();
-              }
-              rankDisplacement += Math.abs(e.getValue()[0] - preds[0]);
-              if (etalonProb > 0) {
-                kl += etalonProb * Math.log(etalonProb / preds[1]);
-                rmse += Math.pow(etalonProb - preds[1], 2.0);
-                if (etalonProb > maxEtalon) {
-                  argmaxEtalon = e.getKey();
-                }
-              }
+            for (int i = N; i >= 0; --i) {
+              probs[i] /= probs[0];
             }
-            rmse = Math.sqrt(rmse / numOfNeighbors);
-            rankDisplacement /= Math.pow(numOfNeighbors, 2.0);
-            int match = argmaxPrediction == argmaxEtalon ? 1 : 0;
-            out.format("%s\t%d\t%.5f\t%.5f\t%d\t%.5f\n", currentArticle, numOfNeighbors, kl, rmse, match, rankDisplacement);
-            out.flush();
           }
+          if (probs.length == neighborhood.length - 1) {
+            double[] extendedProbs = new double[probs.length + 1];
+            double sum = 0;
+            for (int i = 0; i < probs.length; ++i) {
+              extendedProbs[i + 1] = probs[i];
+              sum += probs[i];
+            }
+            probs = extendedProbs;
+            if (Math.abs(sum - 1) > 1e-6) {
+              System.err.println("WARNING: transition probs do not sum up to 1 for " + currentArticle);
+            }
+          }
+
+          double[] etalonTransitions = new double[probs.length];
+          double maxEtalonTransition = 0;
+          int argMaxNeighbor = -1;
+          for (int i = 1; i <= N; ++i) {
+            double freq = (double) e.getValue().getOrDefault(neighborhood[i], 0);
+            etalonTransitions[i] = freq / totalOutclicks.get(e.getKey());
+            if (maxEtalonTransition < etalonTransitions[i]) {
+              maxEtalonTransition = etalonTransitions[i];
+              argMaxNeighbor = neighborhood[i];
+            }
+          }
+
+          int[] sort = Utils.stableSort(probs);
+          Map<Integer, double[]> sortedPredictions = new HashMap<>();
+          int argmaxRank = -1;
+          String predictedTransition = null;
+          for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
+            if (sort[i] != 0) {
+              sortedPredictions.put(neighborhood[sort[i]], new double[] { ++rank, probs[sort[i]] });
+              if (neighborhood[sort[i]] == argMaxNeighbor) {
+                argmaxRank = rank;
+              }
+              if (rank == 1) {
+                predictedTransition = we.g.getNodeLabel(neighborhood[sort[i]]);
+                mostProbablePredictedTransition.put(e.getKey(), neighborhood[sort[i]]);
+              }
+            }
+          }
+
+          sort = Utils.stableSort(etalonTransitions);
+          Map<Integer, double[]> sortedEtalons = new HashMap<>();
+          for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
+            if (sort[i] != 0) {
+              sortedEtalons.put(neighborhood[sort[i]], new double[] { ++rank, etalonTransitions[sort[i]] });
+              if (rank == 1) {
+                mostProbableEtalonTransition.put(e.getKey(), neighborhood[sort[i]]);
+              }
+            }
+          }
+
+          double kl = 0, rmse = 0, rankDisplacement = 0;
+          for (Entry<Integer, double[]> etalon : sortedEtalons.entrySet()) {
+            double[] preds = sortedPredictions.get(etalon.getKey());
+            double etalonProb = etalon.getValue()[1];
+            rankDisplacement += Math.abs(etalon.getValue()[0] - preds[0]);
+            if (etalonProb > 0) {
+              kl += etalonProb * Math.log(etalonProb / preds[1]);
+              rmse += Math.pow(etalonProb - preds[1], 2.0);
+            }
+          }
+          rmse = Math.sqrt(rmse / N);
+          rankDisplacement /= Math.pow(N, 2.0);
+          double reciprocalRank = 1.0d / argmaxRank;
+          String etalonTransition = we.g.getNodeLabel(argMaxNeighbor);
+          out.format("%s\t%s\t%s\t%d\t%.5f\t%.5f\t%d\t%.5f\t%.5f\n", currentArticle, predictedTransition, etalonTransition, N, kl, rmse,
+              argmaxRank == 1 ? 1 : 0, reciprocalRank, rankDisplacement);
+          out.flush();
         }
 
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+      System.err.println("#ETALON transitions = " + mostProbableEtalonTransition.size());
+      Map<Integer, Integer> mutuallyStrongEtalons = new HashMap<>();
+      for (Entry<Integer, Integer> mp : mostProbableEtalonTransition.entrySet()) {
+        Integer reverse = mostProbableEtalonTransition.getOrDefault(mp.getValue(), -1);
+        // System.err.println(mp.getKey() + " " + we.g.getNodeLabel(mp.getKey()) + " " + mp.getValue() + " " + we.g.getNodeLabel(mp.getValue()) + " "
+        // + reverse);
+        if (reverse.equals(mp.getKey())) {
+          mutuallyStrongEtalons.put(mp.getKey(), mp.getValue());
+        }
+      }
+      Map<Integer, Integer> mutuallyStrongPredictions = new HashMap<>();
+      for (Entry<Integer, Integer> mp : mostProbablePredictedTransition.entrySet()) {
+        Integer reverse = mostProbablePredictedTransition.getOrDefault(mp.getValue(), -1);
+        if (reverse.equals(mp.getKey())) {
+          mutuallyStrongPredictions.put(mp.getKey(), mp.getValue());
+        }
+      }
+
+      System.err.format("%d and %d etalon and predicted strong pairs resp.", mutuallyStrongPredictions.size(), mutuallyStrongEtalons.size());
+      try (PrintWriter out = new PrintWriter(String.format("strong_pairs_%s.out", mode))) {
+        for (Entry<Integer, Integer> predictedStrongs : mutuallyStrongPredictions.entrySet()) {
+          String from = we.g.getNodeLabel(predictedStrongs.getKey());
+          String to = we.g.getNodeLabel(predictedStrongs.getValue());
+          int etalonTo = mutuallyStrongEtalons.getOrDefault(predictedStrongs.getKey(), -1);
+          out.format("%s\t%s\t%d\n", from, to, predictedStrongs.getValue() == etalonTo ? 1 : 0);
+        }
       } catch (IOException e) {
         e.printStackTrace();
       }
