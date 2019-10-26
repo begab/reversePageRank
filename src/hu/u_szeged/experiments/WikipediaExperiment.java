@@ -1104,11 +1104,12 @@ public class WikipediaExperiment extends AbstractExperiment {
       Map<Integer, Integer> mostProbableEtalonTransition = new HashMap<>();
       try (PrintWriter out = new PrintWriter(String.format("eval_%s_%d_%.4f.out", mode, modelId, we.learner.getTeleportProb()))) {
         out.write("article\tetalon_transition\tpredicted_transition\tN\tKL-divergence\tRMSE\tP@1\tMRR\tdisplacement\n");
-        for (Entry<Integer, Map<Integer, Integer>> e : etalonNeighbors.entrySet()) {
-          String currentArticle = we.g.getNodeLabel(e.getKey());
-          int[] neighborhood = we.g.getOutLinks(e.getKey());
+        for (int e = 0; e < we.g.getNumOfNodes(); ++e) {
+          Map<Integer, Integer> etalonNeighborhood = etalonNeighbors.get(e);
+          String currentArticle = we.g.getNodeLabel(e);
+          int[] neighborhood = we.g.getOutLinks(e);
           int N = neighborhood[0];
-          double[] probs = we.g.getWeights(e.getKey());
+          double[] probs = we.g.getWeights(e);
           if (mode.equals("invPR") || mode.equals("clickstream")) {
             double[] tempProbs = new double[N + 1];
             for (int i = 0; i < tempProbs.length; ++i) {
@@ -1116,13 +1117,13 @@ public class WikipediaExperiment extends AbstractExperiment {
             }
             probs = tempProbs;
           } else if (mode.equals("jaccard")) {
-            probs = we.calculateJaccardScores(e.getKey());
+            probs = we.calculateJaccardScores(e);
           } else if (mode.equals("pagerank")) {
-            probs = we.calculatePageRankScores(e.getKey());
+            probs = we.calculatePageRankScores(e);
           } else if (mode.equals("popularity")) {
-            probs = we.calculatePopularityScores(e.getKey());
+            probs = we.calculatePopularityScores(e);
           } else if (mode.equals("degree")) {
-            probs = we.calculateIndegreeScores(e.getKey());
+            probs = we.calculateIndegreeScores(e);
           } else if (mode.equals("random")) {
             probs = new double[probs.length];
             for (int i = 1; i <= N; ++i) {
@@ -1149,9 +1150,9 @@ public class WikipediaExperiment extends AbstractExperiment {
           double[] etalonTransitions = new double[probs.length];
           double maxEtalonTransition = 0;
           int argMaxNeighbor = -1;
-          for (int i = 1; i <= N; ++i) {
-            double freq = (double) e.getValue().getOrDefault(neighborhood[i], 0);
-            etalonTransitions[i] = freq / totalOutclicks.get(e.getKey());
+          for (int i = 1; etalonNeighborhood != null && i <= N; ++i) {
+            double freq = (double) etalonNeighborhood.getOrDefault(neighborhood[i], 0);
+            etalonTransitions[i] = freq / totalOutclicks.get(e);
             if (maxEtalonTransition < etalonTransitions[i]) {
               maxEtalonTransition = etalonTransitions[i];
               argMaxNeighbor = neighborhood[i];
@@ -1168,20 +1169,24 @@ public class WikipediaExperiment extends AbstractExperiment {
               if (neighborhood[sort[i]] == argMaxNeighbor) {
                 argmaxRank = rank;
               }
-              if (rank == 1) {
+              if (N == 1 || (predictedTransition == null && e != neighborhood[sort[i]])) {
+                // choose the first non self-loop (or the first link in case there are no more)
                 predictedTransition = we.g.getNodeLabel(neighborhood[sort[i]]);
-                mostProbablePredictedTransition.put(e.getKey(), neighborhood[sort[i]]);
+                mostProbablePredictedTransition.put(e, neighborhood[sort[i]]);
               }
             }
           }
 
+          if (etalonNeighborhood == null) {
+            continue; // this site is not included in the clickstream dataset
+          }
           sort = Utils.stableSort(etalonTransitions);
           Map<Integer, double[]> sortedEtalons = new HashMap<>();
           for (int i = sort.length - 1, rank = 0; i >= 0; --i) {
             if (sort[i] != 0) {
               sortedEtalons.put(neighborhood[sort[i]], new double[] { ++rank, etalonTransitions[sort[i]] });
               if (rank == 1) {
-                mostProbableEtalonTransition.put(e.getKey(), neighborhood[sort[i]]);
+                mostProbableEtalonTransition.put(e, neighborhood[sort[i]]);
               }
             }
           }
@@ -1209,19 +1214,18 @@ public class WikipediaExperiment extends AbstractExperiment {
         e.printStackTrace();
       }
       System.err.println("#ETALON transitions = " + mostProbableEtalonTransition.size());
+      System.err.println("#Predicted transitions = " + mostProbablePredictedTransition.size());
       Map<Integer, Integer> mutuallyStrongEtalons = new HashMap<>();
       for (Entry<Integer, Integer> mp : mostProbableEtalonTransition.entrySet()) {
         Integer reverse = mostProbableEtalonTransition.getOrDefault(mp.getValue(), -1);
-        // System.err.println(mp.getKey() + " " + we.g.getNodeLabel(mp.getKey()) + " " + mp.getValue() + " " + we.g.getNodeLabel(mp.getValue()) + " "
-        // + reverse);
-        if (reverse.equals(mp.getKey())) {
+        if (reverse.equals(mp.getKey()) && mp.getKey() < mp.getValue()) {
           mutuallyStrongEtalons.put(mp.getKey(), mp.getValue());
         }
       }
       Map<Integer, Integer> mutuallyStrongPredictions = new HashMap<>();
       for (Entry<Integer, Integer> mp : mostProbablePredictedTransition.entrySet()) {
         Integer reverse = mostProbablePredictedTransition.getOrDefault(mp.getValue(), -1);
-        if (reverse.equals(mp.getKey())) {
+        if (reverse.equals(mp.getKey()) && mp.getKey() < mp.getValue()) {
           mutuallyStrongPredictions.put(mp.getKey(), mp.getValue());
         }
       }
@@ -1232,7 +1236,12 @@ public class WikipediaExperiment extends AbstractExperiment {
           String from = we.g.getNodeLabel(predictedStrongs.getKey());
           String to = we.g.getNodeLabel(predictedStrongs.getValue());
           int etalonTo = mutuallyStrongEtalons.getOrDefault(predictedStrongs.getKey(), -1);
-          out.format("%s\t%s\t%d\n", from, to, predictedStrongs.getValue() == etalonTo ? 1 : 0);
+          int correct = predictedStrongs.getValue() == etalonTo ? 1 : 0;
+          int fromN = we.g.getNumOfNeighbors(predictedStrongs.getKey());
+          int toN = we.g.getNumOfNeighbors(predictedStrongs.getValue());
+          int fromHasEtalonInfo = mostProbableEtalonTransition.containsKey(predictedStrongs.getKey()) ? 1 : 0;
+          int toHasEtalonInfo = mostProbableEtalonTransition.containsKey(predictedStrongs.getValue()) ? 1 : 0;
+          out.format("%s\t%s\t%d\t%d\t%d\t%d\t%d\n", from, to, fromN, toN, fromHasEtalonInfo, toHasEtalonInfo, correct);
         }
       } catch (IOException e) {
         e.printStackTrace();
