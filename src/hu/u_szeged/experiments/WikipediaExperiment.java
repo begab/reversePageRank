@@ -360,7 +360,10 @@ public class WikipediaExperiment extends AbstractExperiment {
     }
     double[] normalized = new double[d.length];
     for (int i = 0; i < d.length; ++i) {
-      normalized[i] = d[i] / sum;
+      normalized[i] = d[i];
+      if (sum != 0) {
+        normalized[i] /= sum;
+      }
     }
     return normalized;
   }
@@ -371,7 +374,10 @@ public class WikipediaExperiment extends AbstractExperiment {
     for (int j = 1; j <= neighs[0]; ++j) {
       int[] outLinksForNeighbor = g.getOutLinks(neighs[j]);
       jaccards[j - 1] = Utils.determineOverlap(neighs, outLinksForNeighbor);
-      jaccards[j - 1] /= (double) (neighs[0] + outLinksForNeighbor[0] - jaccards[j - 1]);
+      double denominator = (double) (neighs[0] + outLinksForNeighbor[0] - jaccards[j - 1]);
+      if (denominator != 0) {
+        jaccards[j - 1] /= denominator;
+      }
     }
     return normalize(jaccards);
   }
@@ -1024,7 +1030,6 @@ public class WikipediaExperiment extends AbstractExperiment {
   }
 
   public static void main(String[] args) {
-
     if (args.length < 4) {
       System.err.format("4 command line arguments (i.e. folder, language, date, learn/query?) need to be provided. Program exits now.");
       System.exit(1);
