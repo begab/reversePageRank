@@ -30,9 +30,18 @@ public class WikipediaExperiment extends AbstractExperiment {
 
   private String dir, lang, date;
   private Scanner scanner;
+  private static final double DEFAULT_TELEPORT = 0.01;
 
   public WikipediaExperiment(String directory, String language, String d) {
-    this(directory, language, d, true);
+    this(directory, language, d, true, DEFAULT_TELEPORT);
+  }
+
+  public WikipediaExperiment(String directory, String language, String d, double teleport) {
+    this(directory, language, d, true, teleport);
+  }
+
+  public WikipediaExperiment(String directory, String language, String d, boolean readEtalonNodeWeights) {
+    this(directory, language, d, readEtalonNodeWeights, DEFAULT_TELEPORT);
   }
 
   /**
@@ -43,11 +52,11 @@ public class WikipediaExperiment extends AbstractExperiment {
    * @param d
    * @param readEtalonWeights
    */
-  public WikipediaExperiment(String directory, String language, String d, boolean readEtalonNodeWeights) {
+  public WikipediaExperiment(String directory, String language, String d, boolean readEtalonNodeWeights, double teleport) {
     date = d;
     dir = directory;
     lang = language;
-    init(readEtalonNodeWeights);
+    init(readEtalonNodeWeights, teleport);
   }
 
   /**
@@ -55,7 +64,7 @@ public class WikipediaExperiment extends AbstractExperiment {
    * 
    * @param readEtalonNodeWeights
    */
-  public void init(boolean readEtalonNodeWeights) {
+  public void init(boolean readEtalonNodeWeights, double teleport) {
     File serializedGraphFile = new File(String.format("%s/%s%sGraph.ser", dir, lang, date));
     File serializedEtalonsFile = readEtalonNodeWeights ? new File(String.format("%s/%s%sEtalon.ser", dir, lang, date)) : null;
     readSerializedGraph(serializedGraphFile, serializedEtalonsFile);
@@ -83,8 +92,9 @@ public class WikipediaExperiment extends AbstractExperiment {
     // } catch (IOException e) {
     // e.printStackTrace();
     // }
-    learner = new SoftmaxPRWeightLearner(etalonDistr, g, 0.01d);
-    System.err.format("There are %d, %d nodes and links in the %s/%s%s graph, respectively.\n", g.getNumOfNodes(), g.getNumOfEdges(), dir, lang, date);
+    learner = new SoftmaxPRWeightLearner(etalonDistr, g, teleport);
+    System.err.format("There are %d, %d nodes and links in the %s/%s%s graph, respectively and a beta of %.4f is used.\n", g.getNumOfNodes(), g.getNumOfEdges(),
+        dir, lang, date, learner.getTeleportProb());
     scanner = new Scanner(System.in);
   }
 
@@ -1087,7 +1097,7 @@ public class WikipediaExperiment extends AbstractExperiment {
 
       Map<Integer, Integer> mostProbablePredictedTransition = new HashMap<>();
       Map<Integer, Integer> mostProbableEtalonTransition = new HashMap<>();
-      try (PrintWriter out = new PrintWriter(String.format("eval_%s_%d.out", mode, modelId))) {
+      try (PrintWriter out = new PrintWriter(String.format("eval_%s_%d_%.4f.out", mode, modelId, we.learner.getTeleportProb()))) {
         out.write("article\tetalon_transition\tpredicted_transition\tN\tKL-divergence\tRMSE\tP@1\tMRR\tdisplacement\n");
         for (Entry<Integer, Map<Integer, Integer>> e : etalonNeighbors.entrySet()) {
           String currentArticle = we.g.getNodeLabel(e.getKey());
@@ -1212,7 +1222,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       }
 
       System.err.format("%d and %d etalon and predicted strong pairs resp.", mutuallyStrongPredictions.size(), mutuallyStrongEtalons.size());
-      try (PrintWriter out = new PrintWriter(String.format("strong_pairs_%s_%d.out", mode, modelId))) {
+      try (PrintWriter out = new PrintWriter(String.format("strong_pairs_%s_%d_%.4f.out", mode, modelId, we.learner.getTeleportProb()))) {
         for (Entry<Integer, Integer> predictedStrongs : mutuallyStrongPredictions.entrySet()) {
           String from = we.g.getNodeLabel(predictedStrongs.getKey());
           String to = we.g.getNodeLabel(predictedStrongs.getValue());

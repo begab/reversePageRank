@@ -154,7 +154,7 @@ public class CitibikeExperiment extends AbstractExperiment {
       for (String m : evalMetrics) {
         out.write(m + "\t");
       }
-      out.write("mode\tteleport\tnum_models\n");
+      out.write("N\tmode\tteleport\tnum_models\n");
       for (double teleProb : new double[] { 0.2, 0.1, 0.05, 0.01 }) {
         for (int ri = 1; ri < 6; ++ri) { // number of random initializations to apply
           CitibikeExperiment ce = new CitibikeExperiment("citibike2015_edges.tsv", teleProb);
@@ -222,7 +222,7 @@ public class CitibikeExperiment extends AbstractExperiment {
                   out.format("%.4f\t", nodeEvals[e]);
                   evals[e] += nodeEvals[e];
                 }
-                out.format("%s\t%.2f\t%d\n", mode, teleProb, ri);
+                out.format("%d\t%s\t%.2f\t%d\n", ns[0], mode, teleProb, ri);
               }
             }
             for (int e = 0; e < evals.length; ++e) {

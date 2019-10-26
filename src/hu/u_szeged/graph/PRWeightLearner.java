@@ -360,6 +360,10 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     Utils.serialize(outFile, graph.getWeights());
   }
 
+  public double getTeleportProb() {
+    return teleportProbability;
+  }
+
   public void extensiveLog() {
     extensiveLog(Integer.MAX_VALUE, false);
   }
