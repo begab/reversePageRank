@@ -10,3 +10,6 @@
 *.params
 *.pdf
 *.png
+*.log
+*.out
+*.xml
