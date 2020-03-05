@@ -13,3 +13,7 @@
 *.log
 *.out
 *.xml
+*.tsv
+*.py
+*.results
+
