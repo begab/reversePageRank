@@ -115,6 +115,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
       }
       long time = System.currentTimeMillis();
       double[] objVals = learnEdgeWeights();
+      System.err.println(i + " " + (System.currentTimeMillis() - time) / 1000.0d + "\n=============");
       toReturn[toReturn.length - 1][i] = (System.currentTimeMillis() - time) / 1000.0d;
       toReturn[toReturn.length - 1][numOfInitializations] += toReturn[toReturn.length - 1][i];
       graph.softmaxNormalizeWeights();

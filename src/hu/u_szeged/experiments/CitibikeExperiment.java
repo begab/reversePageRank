@@ -163,7 +163,7 @@ public class CitibikeExperiment extends AbstractExperiment {
           Random r = new Random(1);
 
           double[] choicerankParams = new double[ce.pagerank.length];
-          try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream("citibike_adapted_choicerank.params")))) {
+          try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream("citibike2015.params")))) {
             String line;
             int i = 0;
             while ((line = br.readLine()) != null) {
