@@ -82,9 +82,9 @@ public class CitibikeExperiment extends AbstractExperiment {
     }
     try (PrintWriter out = new PrintWriter("citibike2015_edges_adapted.tsv")) {
       for (int i = 0; i < g.getNumOfNodes(); ++i) {
-        int[] neigs = g.getOutLinks(i);
-        for (int j = 1; j <= neigs[0]; ++j) {
-          out.format("%d\t%d\t%f\n", i, neigs[j], etalonDistr[neigs[j]]);
+        int[] neighs = g.getOutLinks(i);
+        for (int j = 1; j <= neighs[0]; ++j) {
+          out.format("%d\t%d\t%f\n", i, neighs[j], etalonDistr[neighs[j]]);
         }
       }
     } catch (IOException io) {
