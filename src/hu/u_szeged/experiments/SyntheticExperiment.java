@@ -127,7 +127,7 @@ public class SyntheticExperiment {
     if (baselineEdgeWeights == null) {
       normalizedEdgeWeights = new double[etalonSyntheticGraph.getNumOfEdges()];
       for (int i = 0, j = 0; i < etalonSyntheticGraph.getNumOfNodes(); ++i) {
-        int neighbors = etalonSyntheticGraph.getNumOfNeighbors(i);
+        int neighbors = etalonSyntheticGraph.getOutDegree(i);
         for (int e = 0; e < neighbors; ++e) {
           normalizedEdgeWeights[j++] = 1.0 / neighbors;
         }
@@ -168,7 +168,7 @@ public class SyntheticExperiment {
   private double getPrecisionAtK(OwnGraph etalonSyntheticGraph, double[] params, int k) {
     double match = 0, denominator = 0;
     for (int i = 0, h = 0; i < etalonSyntheticGraph.getNumOfNodes(); ++i) {
-      int neighbors = etalonSyntheticGraph.getNumOfNeighbors(i);
+      int neighbors = etalonSyntheticGraph.getOutDegree(i);
       Set<Integer> strongNeighbors = new HashSet<>();
       double max = 0.0d;
       double[] weights = etalonSyntheticGraph.getWeights(i);
@@ -215,7 +215,7 @@ public class SyntheticExperiment {
   private double getAverageDiff(OwnGraph etalonSyntheticGraph, double[] params, int power) {
     double difference = 0.0d;
     for (int i = 0, paramId = 0; i < etalonSyntheticGraph.getNumOfNodes(); ++i) {
-      int neighbors = etalonSyntheticGraph.getNumOfNeighbors(i);
+      int neighbors = etalonSyntheticGraph.getOutDegree(i);
       double[] weights = etalonSyntheticGraph.getWeights(i);
       for (int j = 1; j <= neighbors; ++j, ++paramId) {
         double weight = 1.0d / neighbors;

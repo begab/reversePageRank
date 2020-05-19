@@ -68,8 +68,8 @@ public class OwnGraph implements Serializable, Cloneable {
   }
 
   public OwnGraph clone() {
-    OwnGraph copy = new OwnGraph(this.getNumOfNodes());
-    for (int i = 0; i < this.getNumOfNodes(); ++i) {
+    OwnGraph copy = new OwnGraph(this.numOfNodes);
+    for (int i = 0; i < this.numOfNodes; ++i) {
       copy.setNodeLabel(this.getNodeLabel(i), i);
       int[] neighbors = this.getOutLinks(i);
       double[] weightsToClone = this.getWeights(i);
@@ -96,10 +96,6 @@ public class OwnGraph implements Serializable, Cloneable {
     return indegrees[i];
   }
 
-  public int getNumOfNeighbors(int i) {
-    return neighbors[i][0];
-  }
-
   public int getOutDegree(int i) {
     return neighbors[i][0];
   }
@@ -118,7 +114,7 @@ public class OwnGraph implements Serializable, Cloneable {
   public int[] getInLinks(int target) {
     int[] inLinks = new int[indegrees[target] + 1];
     inLinks[0] = indegrees[target];
-    for (int i = 0, j = 0; i < getNumOfNodes() && j < inLinks.length; ++i) {
+    for (int i = 0, j = 0; i < numOfNodes && j < inLinks.length; ++i) {
       if (findNodeIndex(i, target) >= 0) {
         inLinks[++j] = i;
       }
@@ -159,7 +155,7 @@ public class OwnGraph implements Serializable, Cloneable {
   public double[] getWeights() {
     double[] everyWeight = new double[numOfEdges];
     for (int i = 0, index = 0; i < numOfNodes; ++i) {
-      int nbrs = getNumOfNeighbors(i);
+      int nbrs = getOutDegree(i);
       double[] ws = weights[i];
       for (int j = 1; j <= nbrs; ++j, index++) {
         everyWeight[index] = ws[j];
@@ -170,7 +166,7 @@ public class OwnGraph implements Serializable, Cloneable {
 
   public double getTotalWeights() {
     double totalWeight = 0.0d;
-    for (int i = 0; i < getNumOfNodes(); ++i) {
+    for (int i = 0; i < numOfNodes; ++i) {
       totalWeight += getWeights(i)[0];
     }
     return totalWeight;
@@ -201,7 +197,6 @@ public class OwnGraph implements Serializable, Cloneable {
    * Reassigns edge weights in the graph based on the values of newWeights.
    * 
    * @param newWeights
-   * @param softmax
    */
   public void setWeights(double[] newWeights) {
     int i = 0;
@@ -253,7 +248,7 @@ public class OwnGraph implements Serializable, Cloneable {
   }
 
   public void initWeights(WeightingStrategy weightStrat) {
-    for (int i = 0; i < getNumOfNodes(); ++i) {
+    for (int i = 0; i < numOfNodes; ++i) {
       int[] neighs = getOutLinks(i);
       if (weightStrat == WeightingStrategy.RAND) {
         weights[i] = Utils.drawMultinomial(neighs[0], new double[] { 1.0d });
@@ -261,7 +256,7 @@ public class OwnGraph implements Serializable, Cloneable {
         double[] neighsTotalDegree = new double[neighs[0]];
         int maxDegree = 0;
         for (int n = 1; n <= neighs[0]; ++n) {
-          neighsTotalDegree[n - 1] = getIndegree(neighs[n]) + getNumOfNeighbors(neighs[n]);
+          neighsTotalDegree[n - 1] = getIndegree(neighs[n]) + getOutDegree(neighs[n]);
           maxDegree = Math.max(maxDegree, (int) neighsTotalDegree[n - 1]);
         }
         for (int n = 1; weightStrat == WeightingStrategy.INVERSE_DEGREE_BASED && n <= neighs[0]; ++n) {
@@ -390,7 +385,7 @@ public class OwnGraph implements Serializable, Cloneable {
 
   public void normalizeWeights() {
     for (int i = 0; i < numOfNodes; ++i) {
-      normalizeWeights(weights[i], getNumOfNeighbors(i));
+      normalizeWeights(weights[i], getOutDegree(i));
     }
   }
 
@@ -416,13 +411,13 @@ public class OwnGraph implements Serializable, Cloneable {
 
   public void softmaxNormalizeWeights() {
     for (int i = 0; i < numOfNodes; ++i) {
-      Utils.softmaxNormalize(weights[i], getNumOfNeighbors(i));
+      Utils.softmaxNormalize(weights[i], getOutDegree(i));
     }
   }
 
   public void softmaxDenormalizeWeights() {
     for (int i = 0; i < numOfNodes; ++i) {
-      Utils.softmaxDenormalize(weights[i], getNumOfNeighbors(i));
+      Utils.softmaxDenormalize(weights[i], getOutDegree(i));
     }
   }
 
@@ -478,7 +473,7 @@ public class OwnGraph implements Serializable, Cloneable {
   public String returnWeightMatrix() {
     int[] froms = new int[numOfEdges], tos = new int[numOfEdges];
     double[] ws = new double[numOfEdges];
-    for (int n = 0, i = 0; n < this.getNumOfNodes(); ++n) {
+    for (int n = 0, i = 0; n < this.numOfNodes; ++n) {
       int[] neighs = this.getOutLinks(n);
       double[] weights = this.getWeights(n);
       for (int j = 1; j <= neighs[0]; ++j, ++i) {
@@ -497,7 +492,7 @@ public class OwnGraph implements Serializable, Cloneable {
    */
   public void toSnapFile(String file) {
     try (PrintWriter out = new PrintWriter(file)) {
-      for (int i = 0; i < getNumOfNodes(); ++i) {
+      for (int i = 0; i < numOfNodes; ++i) {
         int[] neighs = getOutLinks(i);
         for (int n = 1; n <= neighs[0]; ++n) {
           out.format("%d\t%d\t%s\t%s\n", i, neighs[n], getNodeLabel(i), getNodeLabel(neighs[n]));
@@ -522,10 +517,10 @@ public class OwnGraph implements Serializable, Cloneable {
   public void saveToDot(double[] prs, double[] etalon, String fileName, double lowerWeightLimit, double upperWeightLimit) {
     try (PrintWriter out = new PrintWriter(fileName)) {
       out.println("digraph romeo_and_juliet{\n\toverlap = false;\n\tnode [shape=box,style=filled,width=.3, height=.3];");
-      for (int i = 0; i < getNumOfNodes(); ++i) {
+      for (int i = 0; i < numOfNodes; ++i) {
         out.format("\t%d [label=\"%s\n(%.1f/%.1f)\"]\n", i, getNodeLabel(i), prs[i] * 100, etalon[i] * 100);
       }
-      for (int i = 0; i < getNumOfNodes(); ++i) {
+      for (int i = 0; i < numOfNodes; ++i) {
         int[] ns = getOutLinks(i);
         double[] ws = getWeights(i);
         double maxWeight = 0.0d;
@@ -548,7 +543,7 @@ public class OwnGraph implements Serializable, Cloneable {
   }
 
   public void printInTikz(PrintStream log) {
-    for (int n = 0; n < getNumOfNodes(); ++n) {
+    for (int n = 0; n < numOfNodes; ++n) {
       int[] neighs = getOutLinks(n);
       double[] weights = getWeights(n);
       int[] order = Utils.stableSort(weights);
@@ -569,7 +564,7 @@ public class OwnGraph implements Serializable, Cloneable {
    * @return
    */
   public boolean isSymmetric() {
-    for (int i = 0; i < getNumOfNodes(); ++i) {
+    for (int i = 0; i < numOfNodes; ++i) {
       int[] neighs = getOutLinks(i);
       for (int n = 1; n <= neighs[0]; ++n) {
         int[] neighs2 = getOutLinks(neighs[n]);
@@ -602,8 +597,8 @@ public class OwnGraph implements Serializable, Cloneable {
    */
   public int[][] bfs(int source, Set<Integer> interestingNodes) {
     boolean limitedBFS = interestingNodes.size() > 0;
-    int[][] distances = new int[2][this.getNumOfNodes()];
-    for (int i = 0; i < this.getNumOfNodes(); ++i) {
+    int[][] distances = new int[2][numOfNodes];
+    for (int i = 0; i < this.numOfNodes; ++i) {
       distances[0][i] = distances[1][i] = -1;
     }
     distances[0][source] = 0;
@@ -637,8 +632,8 @@ public class OwnGraph implements Serializable, Cloneable {
    */
   public double[][] dijkstra(int source, Set<Integer> interestingNodes) {
     boolean limitedDisjktra = interestingNodes.size() > 0;
-    double[][] shortestPaths = new double[2][this.getNumOfNodes()];// hack for returning the shortest path together with the distances simultaneously
-    for (int i = 0; i < this.getNumOfNodes(); ++i) {
+    double[][] shortestPaths = new double[2][numOfNodes];// hack for returning the shortest path together with the distances simultaneously
+    for (int i = 0; i < this.numOfNodes; ++i) {
       shortestPaths[0][i] = Double.MAX_VALUE;
       shortestPaths[1][i] = -1;
     }
@@ -659,7 +654,7 @@ public class OwnGraph implements Serializable, Cloneable {
         }
       }
     }
-    for (int i = 0; i < this.getNumOfNodes(); ++i) {
+    for (int i = 0; i < numOfNodes; ++i) {
       shortestPaths[0][i] = Math.exp(-shortestPaths[0][i]);
     }
     return shortestPaths;

@@ -80,7 +80,7 @@ public class SoftmaxPRWeightLearner extends PRWeightLearner {
   public void getParameters(double[] buffer) {
     int i = 0;
     for (int n = 0; n < graph.getNumOfNodes(); ++n) {
-      int numOfNeighbors = graph.getNumOfNeighbors(n);
+      int numOfNeighbors = graph.getOutDegree(n);
       double[] weights = graph.getWeights(n);
       for (int k = 2; k <= numOfNeighbors; ++k, i++) { // one (unnormalized) edge weight per node is always assumed to be 0, thus not a parameter
         buffer[i] = weights[k];

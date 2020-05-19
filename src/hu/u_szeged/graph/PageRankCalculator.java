@@ -139,6 +139,19 @@ public class PageRankCalculator {
     return ranksToReturn;
   }
 
+  public double[] calculateUnweightedPageRank(OwnGraph graph) {
+    return calculateUnweightedPageRank(graph, false)[0];
+  }
+
+  public double[][] calculateUnweightedPageRank(OwnGraph graph, boolean returnPerIterationRanks) {
+    double[] actualWeights = graph.getWeights().clone();
+    double[] tempWeights = new double[actualWeights.length];
+    graph.setWeights(tempWeights);
+    double[][] prs = this.calculatePageRank(graph, true, returnPerIterationRanks);
+    graph.setWeights(actualWeights);
+    return prs;
+  }
+
   /**
    * Calculates the difference between two consecutive page rank vectors and redistributes the missing distribution
    * 

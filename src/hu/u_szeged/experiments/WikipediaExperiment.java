@@ -313,11 +313,10 @@ public class WikipediaExperiment extends AbstractExperiment {
   private void printBaselineLine(PrintWriter writer, double[] values, int i) {
     int[] neighbors = g.getOutLinks(i);
     double[] weights = g.getWeights(i);
-    writer.format("%d\t%s\t%d\n", i, g.getNodeLabel(i), g.getNumOfNeighbors(i));
+    writer.format("%d\t%s\t%d\n", i, g.getNodeLabel(i), g.getOutDegree(i));
     int[] ranking = Utils.stableSort(values);
     for (int j = 0; j < ranking.length; ++j) {
-      int r = ranking[ranking.length - 1 - j] + 1; // +1 is for skipping the 0th
-                                                   // meta-elements
+      int r = ranking[ranking.length - 1 - j] + 1; // +1 is for skipping the 0th meta-elements
       writer.format("\t->%s\t%f\t%f\t%d\n", g.getNodeLabel(neighbors[r]), weights[r], values[r - 1], neighbors[r]);
     }
   }
@@ -709,7 +708,7 @@ public class WikipediaExperiment extends AbstractExperiment {
       int[] ns = g.getOutLinks(nodeId);
       int[] outdegs = new int[ns[0]];
       for (int n = 1; n <= ns[0]; ++n) {
-        outdegs[n - 1] = g.getNumOfNeighbors(ns[n]);
+        outdegs[n - 1] = g.getOutDegree(ns[n]);
       }
       int[] numOfLinksBasedOrder = Utils.stableSort(outdegs);
       int[] nbrs = new int[ns[0] + 1];
@@ -719,7 +718,7 @@ public class WikipediaExperiment extends AbstractExperiment {
         int nid = ns[numOfLinksBasedOrder[ns[0] - n] + 1];
         nbrs[n] = nid;
         String neighboringPageName = g.getNodeLabel(nid);
-        System.err.format("%4d: %60s\t%5d\t%5d\n", n, neighboringPageName, g.getNumOfNeighbors(nid), g.getIndegree(nid));
+        System.err.format("%4d: %60s\t%5d\t%5d\n", n, neighboringPageName, g.getOutDegree(nid), g.getIndegree(nid));
         if (neighboringPageName.equals(targetWikiPage)) {
           targetPageId = nid;
         }
@@ -1237,8 +1236,8 @@ public class WikipediaExperiment extends AbstractExperiment {
           String to = we.g.getNodeLabel(predictedStrongs.getValue());
           int etalonTo = mutuallyStrongEtalons.getOrDefault(predictedStrongs.getKey(), -1);
           int correct = predictedStrongs.getValue() == etalonTo ? 1 : 0;
-          int fromN = we.g.getNumOfNeighbors(predictedStrongs.getKey());
-          int toN = we.g.getNumOfNeighbors(predictedStrongs.getValue());
+          int fromN = we.g.getOutDegree(predictedStrongs.getKey());
+          int toN = we.g.getOutDegree(predictedStrongs.getValue());
           int fromHasEtalonInfo = mostProbableEtalonTransition.containsKey(predictedStrongs.getKey()) ? 1 : 0;
           int toHasEtalonInfo = mostProbableEtalonTransition.containsKey(predictedStrongs.getValue()) ? 1 : 0;
           out.format("%s\t%s\t%d\t%d\t%d\t%d\t%d\n", from, to, fromN, toN, fromHasEtalonInfo, toHasEtalonInfo, correct);

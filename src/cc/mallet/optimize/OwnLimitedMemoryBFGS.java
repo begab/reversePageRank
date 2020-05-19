@@ -321,7 +321,7 @@ public class OwnLimitedMemoryBFGS extends LimitedMemoryBFGS {
     OwnGraph og = ((PRWeightLearner) optimizable).getGraph();
     for (int i = 0, edgeIndex = 0; i < og.getNumOfNodes(); ++i) {
       int[] neighbors = og.getOutLinks(i);
-      double[] weights = Arrays.copyOf(og.getWeights(i), og.getNumOfNeighbors(i) + 1);
+      double[] weights = Arrays.copyOf(og.getWeights(i), og.getOutDegree(i) + 1);
       Utils.softmaxNormalize(weights, neighbors[0]);
       for (int n = 1; n <= neighbors[0]; ++n, ++edgeIndex) {
         // System.err.format("Edge %d weight set to %f\n", edgeIndex, VisualizePageRankLearn.UNIT_EDGE_WIDTH * weights[n]);
