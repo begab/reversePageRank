@@ -10,7 +10,7 @@ in the command line.
 Note that running the above command creates a file named `inversePR.txt` in the current working directory with details of the learning procedure printed to it.
 
 ## Reading in graphs
-Relying on the functionalities provided by [Graphstream](http://graphstream-project.org/doc/Tutorials/Reading-files-using-FileSource/), it is possible to work with networks in multiple popular network formats (including the DOT, TLP and GEXF formats).
+Relying on the functionalities provided by [Graphstream](http://graphstream-project.org/doc/Tutorials/Reading-files-using-FileSource/), it is possible to work with networks in multiple popular network formats (including the DOT, TLP and GEXF formats).  
 The `hu.u_szeged.graph.reader.GraphReader` is an easily extendable class which (on default) operates on the `airplanes-sample.gexf` sample input file in the GEXF format.
 
 ## Dependencies
