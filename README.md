@@ -9,8 +9,12 @@ Assuming access to Maven, the quickest way to give the algorithm a try and also 
 in the command line.  
 Note that running the above command creates a file named `inversePR.txt` in the current working directory with details of the learning procedure printed to it.
 
+## Reading in graphs
+Relying on the functionalities provided by [Graphstream](http://graphstream-project.org/doc/Tutorials/Reading-files-using-FileSource/), it is possible to work with networks in multiple popular network formats (including the DOT, TLP and GEXF formats).
+The `hu.u_szeged.graph.reader.GraphReader` is an easily extendable class which (on default) operates on the `airplanes-sample.gexf` sample input file in the GEXF format.
+
 ## Dependencies
 Our source code relies on the following dependencies (also included in the pom.xml for Maven.)
-* Graphstream v1.3 (http://graphstream-project.org/download/)
+* [Graphstream v1.3](http://graphstream-project.org/download/)
 * Mallet v2.0.9 (http://mallet.cs.umass.edu/download.php)
-* Apache Commons Math v3.6 (http://commons.apache.org/proper/commons-math/download_math.cgi)
+* [Apache Commons Math v3.6](http://commons.apache.org/proper/commons-math/download_math.cgi)
