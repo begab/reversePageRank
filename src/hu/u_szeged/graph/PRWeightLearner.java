@@ -380,8 +380,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
       }
 
       int[] order = Utils.stableSort(weightsToRank);
-      double expected = neighs[0] == 0 ? 0 : 1.0 / neighs[0];
-      log.format("%d\t%s\t%f\t%d\n", n, graph.getNodeLabel(n), expected, neighs[0]);
+      log.format("%d\t%s\n", n, graph.getNodeLabel(n));
       for (int i = 0; i < Math.min(order.length, maxToPrint); ++i) {
         int o = order[order.length - 1 - i];
         log.format("\t->%s\t%.6f\n", graph.getNodeLabel(neighs[o + 1]), weightsToRank[o]);

@@ -19,6 +19,9 @@ import hu.u_szeged.graph.SoftmaxPRWeightLearner;
 
 public class GraphReader {
 
+  private static Random rnd = new Random(10l);
+  private static double[] etalonWeights;
+
   public static OwnGraph readGraph(String f) {
     Graph g = new DefaultGraph("graph", false, true);
     try {
@@ -32,6 +35,7 @@ public class GraphReader {
     OwnGraph ownGraph = new OwnGraph(g.getNodeCount());
     Iterator<? extends Node> nIt = g.getEachNode().iterator();
     int counter = 0;
+    boolean warning = false;
     double weightSum = 0;
     List<Double> weights = new LinkedList<>();
     while (nIt.hasNext()) {
@@ -40,40 +44,54 @@ public class GraphReader {
       Double etalonNodeWeight = 1d;
       if (n.hasAttribute("weight")) {
         etalonNodeWeight = Double.parseDouble(n.getAttribute("weight"));
+      } else {
+        etalonNodeWeight = rnd.nextDouble();
+        warning = true;
       }
       weightSum += etalonNodeWeight;
       weights.add(etalonNodeWeight);
       ownGraph.setNodeLabel(label == null ? Integer.toString(counter) : label, n.getIndex());
       counter++;
     }
+
+    if (warning) {
+      System.err.println("WARNING: no 'weight' attribute was present in the input file, hence etalon node importances were generated randomly.");
+    }
+
+    etalonWeights = new double[ownGraph.getNumOfNodes()]; // normalize the etalon weights to form a distribution
+    int i = 0;
+    for (double w : weights) {
+      etalonWeights[i++] = w / weightSum;
+    }
+
     Iterator<? extends Edge> eIt = g.getEachEdge().iterator();
     while (eIt.hasNext()) {
       Edge e = eIt.next();
       ownGraph.addEdge(e.getSourceNode().getIndex(), e.getTargetNode().getIndex());
     }
+    System.err.format("Network from file %s with %d vertices and %d edges read in.\n", f, ownGraph.getNumOfNodes(), ownGraph.getNumOfEdges());
+
     return ownGraph;
   }
 
   public static void main(String[] args) {
-    OwnGraph g = GraphReader.readGraph("/home/berend/Desktop/airlines-sample.gexf");
-    System.err.println(g.getNumOfNodes() + " " + g.getNumOfEdges());
-    for (int n = 0; n < 10; ++n) {
-      int[] ids = g.getInLinks(n);
-      System.err.println(n + " " + ids[0]);
+    String inputGraphFile = "./airlines-sample.gexf";
+    String outputFile = "output.log";
+
+    if (args.length > 0) {
+      inputGraphFile = args[0];
     }
-    Random rnd = new Random();
-    double sum = 0;
-    double[] etalons = new double[g.getNumOfNodes()];
-    for (int i = 0; i < etalons.length; ++i) {
-      sum += (etalons[i] = rnd.nextDouble());
-    }
-    for (int i = 0; i < etalons.length; ++i) {
-      etalons[i] /= sum;
-    }
-    PRWeightLearner pr = new SoftmaxPRWeightLearner(etalons, g);
-    pr.setLogFile("output.log");
+
+    OwnGraph g = GraphReader.readGraph(inputGraphFile);
+
+    PRWeightLearner pr = new SoftmaxPRWeightLearner(etalonWeights, g);
+    pr.setLogFile(outputFile);
+
     double[] res = pr.learnEdgeWeights();
-    System.err.println(res[0] + " " + res[1]);
+
+    System.err.format("The initial objective value improved from %f to %f\n" + "The predicted edge transition probabilities were written into file %s.", res[0],
+        res[1], outputFile);
+
     g.softmaxNormalizeWeights();
     pr.extensiveLog();
   }
