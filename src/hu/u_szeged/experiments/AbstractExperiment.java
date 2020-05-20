@@ -150,24 +150,20 @@ public abstract class AbstractExperiment {
   }
 
   protected void learnWeights() {
-    learnWeights(1, false, false);
+    learnWeights(1, false);
   }
 
   protected void learnWeights(int initializations, boolean useAveragedModel) {
-    learnWeights(initializations, useAveragedModel, false);
+    learnWeights(initializations, useAveragedModel, "");
   }
 
-  protected void learnWeights(int initializations, boolean useAveragedModel, boolean relativizeWeights) {
-    learnWeights(initializations, useAveragedModel, relativizeWeights, "");
-  }
-
-  protected void learnWeights(int initializations, boolean useAveragedModel, boolean relativizeWeights, String modelNamePrefix) {
+  protected void learnWeights(int initializations, boolean useAveragedModel, String modelNamePrefix) {
     String className = this.getClass().getSimpleName();
     double[] objectiveLog = learner.learnEdgeWeights(initializations, false, useAveragedModel)[0];
     if (this.verbose) {// now the final verbose model gets printed to the location defined by the outFile variable
       String outFile = String.format("%s%s_%s.txt", modelNamePrefix, className, useAveragedModel ? "_avg" : "");
       learner.setLogFile(outFile);
-      learner.extensiveLog(15, relativizeWeights);
+      learner.extensiveLog(15);
       for (int i = 0; i < objectiveLog.length; i += 2) {
         System.err.format("%d\t%f\t%f\n", (i / 2) + 1, objectiveLog[i], objectiveLog[i + 1]);
       }

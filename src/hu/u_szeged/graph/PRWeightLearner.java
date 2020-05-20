@@ -154,7 +154,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
     return toReturn;
   }
 
-  private double[] learnEdgeWeights() {
+  public double[] learnEdgeWeights() {
     double initObjVal = getValue();
     Optimizer optimizer = new OwnLimitedMemoryBFGS(this);
     try {
@@ -366,17 +366,17 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
   }
 
   public void extensiveLog() {
-    extensiveLog(Integer.MAX_VALUE, false);
+    extensiveLog(Integer.MAX_VALUE);
   }
 
-  public void extensiveLog(int maxToPrint, boolean relativize) {
+  public void extensiveLog(int maxToPrint) {
     for (int n = 0; n < graph.getNumOfNodes(); ++n) {
       int[] neighs = graph.getOutLinks(n);
       double[] weights = graph.getWeights(n);
-      double[] baselineWs = calculateBaselineWeights(neighs);
+      // double[] baselineWs = calculateBaselineWeights(neighs);
       double[] weightsToRank = new double[neighs[0]];
       for (int i = 1; i <= neighs[0]; ++i) {
-        weightsToRank[i - 1] = weights[i] - (relativize ? baselineWs[i] : 0.0d);
+        weightsToRank[i - 1] = weights[i];
       }
 
       int[] order = Utils.stableSort(weightsToRank);
@@ -384,7 +384,7 @@ public abstract class PRWeightLearner implements Optimizable.ByGradientValue {
       log.format("%d\t%s\t%f\t%d\n", n, graph.getNodeLabel(n), expected, neighs[0]);
       for (int i = 0; i < Math.min(order.length, maxToPrint); ++i) {
         int o = order[order.length - 1 - i];
-        log.format("\t->%s\t%.6f\t%.6f\n", graph.getNodeLabel(neighs[o + 1]), weightsToRank[o], baselineWs[o + 1]);
+        log.format("\t->%s\t%.6f\n", graph.getNodeLabel(neighs[o + 1]), weightsToRank[o]);
       }
       log.flush();
     }

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Random;
 
 import org.graphstream.graph.Edge;
 import org.graphstream.graph.Graph;
@@ -13,6 +14,8 @@ import org.graphstream.stream.file.FileSource;
 import org.graphstream.stream.file.FileSourceFactory;
 
 import hu.u_szeged.graph.OwnGraph;
+import hu.u_szeged.graph.PRWeightLearner;
+import hu.u_szeged.graph.SoftmaxPRWeightLearner;
 
 public class GraphReader {
 
@@ -58,5 +61,20 @@ public class GraphReader {
       int[] ids = g.getInLinks(n);
       System.err.println(n + " " + ids[0]);
     }
+    Random rnd = new Random();
+    double sum = 0;
+    double[] etalons = new double[g.getNumOfNodes()];
+    for (int i = 0; i < etalons.length; ++i) {
+      sum += (etalons[i] = rnd.nextDouble());
+    }
+    for (int i = 0; i < etalons.length; ++i) {
+      etalons[i] /= sum;
+    }
+    PRWeightLearner pr = new SoftmaxPRWeightLearner(etalons, g);
+    pr.setLogFile("output.log");
+    double[] res = pr.learnEdgeWeights();
+    System.err.println(res[0] + " " + res[1]);
+    g.softmaxNormalizeWeights();
+    pr.extensiveLog();
   }
 }
