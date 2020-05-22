@@ -93,24 +93,21 @@ public class ClickStreamExperiment extends AbstractExperiment {
       }
       out.write("N\tmode\tteleport\tnum_models\tnodeID\n");
       double teleProb = 0.01;
-      for (int ri = 1; ri < 2; ++ri) { // number of random initializations to apply
-        ClickStreamExperiment ce = new ClickStreamExperiment("/home/berend/datasets/wikipedia_clickstream/2016_03_en_clickstream.tsv.gz", teleProb);
-        ce.setVerbose(false);
-        ce.learnWeights(ri, false);
-        ce.readChoiceRankParams("clickstream.params");
+      int ri = 1;
+      ClickStreamExperiment ce = new ClickStreamExperiment("./data/2016_03_en_clickstream.tsv.gz", teleProb);
+      ce.setVerbose(false);
+      ce.learnWeights(ri, false);
+      ce.readChoiceRankParams("./data/clickstream.params");
 
-        Random r = new Random(1);
+      Random r = new Random(1);
 
-        System.err.println("==========" + teleProb + " " + ri);
-        for (String mode : new String[] { "uniform", "indegree", "jaccard", "popularity", "pagerank", "prlearn", "choicerank" }) {
-          // for (String mode : new String[] { "prlearn" }) {
-          double[] evals = new double[5];
-          int counter = 0;
-          for (int n = 0; n < ce.g.getNumOfNodes(); ++n) {
-            int[] ns = ce.g.getOutLinks(n);
-            if (ns[0] == 0) {
-              continue;
-            }
+      System.err.println("==========" + teleProb + " " + ri);
+      for (String mode : new String[] { "uniform", "indegree", "jaccard", "popularity", "pagerank", "prlearn", "choicerank" }) {
+        double[] evals = new double[5];
+        int counter = 0;
+        for (int n = 0; n < ce.g.getNumOfNodes(); ++n) {
+          int[] ns = ce.g.getOutLinks(n);
+          if (ns[0] > 1) {
             counter++;
             if (mode.equals("prlearn") || teleProb == 0.01) {
               double[] nodeEvals = ce.evaluateNode(n, ce.etalonTransitions.get(n), mode, r);
@@ -121,12 +118,12 @@ public class ClickStreamExperiment extends AbstractExperiment {
               out.format("%d\t%s\t%.2f\t%d\t%d\n", ns[0], mode, teleProb, 1, n);
             }
           }
-          for (int e = 0; e < evals.length; ++e) {
-            evals[e] /= counter;
-          }
-          if (mode.equals("prlearn") || teleProb == 0.01) {
-            System.err.format("%s\t%.2f\t%s\t%d\t%d\n", mode, teleProb, Arrays.toString(evals), counter, ce.g.getNumOfNodes());
-          }
+        }
+        for (int e = 0; e < evals.length; ++e) {
+          evals[e] /= counter;
+        }
+        if (mode.equals("prlearn") || teleProb == 0.01) {
+          System.err.format("%s\t%.2f\t%s\t%d\t%d\n", mode, teleProb, Arrays.toString(evals), counter, ce.g.getNumOfNodes());
         }
       }
     } catch (IOException e) {

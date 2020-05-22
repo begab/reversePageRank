@@ -75,7 +75,7 @@ public class GraphReader {
   }
 
   public static void main(String[] args) {
-    String inputGraphFile = "./airlines-sample.gexf";
+    String inputGraphFile = "./data/airlines-sample.gexf";
     String outputFile = "output.log";
 
     if (args.length > 0) {

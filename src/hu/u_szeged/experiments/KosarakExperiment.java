@@ -93,32 +93,30 @@ public class KosarakExperiment extends AbstractExperiment {
       out.write("N\tmode\tteleport\tnum_models\tnodeID\n");
       for (double teleProb : new double[] { 0.2, 0.1, 0.05, 0.01 }) {
         for (int ri = 1; ri < 6; ++ri) { // number of random initializations to apply
-          KosarakExperiment ke = new KosarakExperiment("kosarak.dat.gz", teleProb);
+          KosarakExperiment ke = new KosarakExperiment("./data/kosarak.dat.gz", teleProb);
           ke.setVerbose(false);
           ke.learnWeights(ri, false);
-          ke.readChoiceRankParams("kosarak.params");
+          ke.readChoiceRankParams("./data/kosarak.params");
 
           Random r = new Random(1);
 
           System.err.println("==========" + teleProb + " " + ri);
           for (String mode : new String[] { "uniform", "indegree", "jaccard", "popularity", "pagerank", "prlearn", "choicerank" }) {
-            // for (String mode : new String[] { "prlearn" }) {
             double[] evals = new double[5];
             int counter = 0;
             for (int n = 0; n < ke.g.getNumOfNodes(); ++n) {
               int[] ns = ke.g.getOutLinks(n);
-              if (ns[0] == 0) {
-                continue;
-              }
-              counter++;
+              if (ns[0] > 1) {
+                counter++;
 
-              if (mode.equals("prlearn") || (teleProb == 0.01 && ri == 5)) {
-                double[] nodeEvals = ke.evaluateNode(n, ke.etalonTransitions.get(n), mode, r);
-                for (int e = 0; e < evals.length; ++e) {
-                  out.format("%.4f\t", nodeEvals[e]);
-                  evals[e] += nodeEvals[e];
+                if (mode.equals("prlearn") || (teleProb == 0.01 && ri == 5)) {
+                  double[] nodeEvals = ke.evaluateNode(n, ke.etalonTransitions.get(n), mode, r);
+                  for (int e = 0; e < evals.length; ++e) {
+                    out.format("%.4f\t", nodeEvals[e]);
+                    evals[e] += nodeEvals[e];
+                  }
+                  out.format("%d\t%s\t%.2f\t%d\t%d\n", ns[0], mode, teleProb, ri, n);
                 }
-                out.format("%d\t%s\t%.2f\t%d\t%d\n", ns[0], mode, teleProb, ri, n);
               }
             }
             for (int e = 0; e < evals.length; ++e) {

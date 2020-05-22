@@ -87,10 +87,10 @@ public class CitibikeExperiment extends AbstractExperiment {
       out.write("N\tmode\tteleport\tnum_models\tnodeID\n");
       for (double teleProb : new double[] { 0.2, 0.1, 0.05, 0.01 }) {
         for (int ri = 1; ri < 6; ++ri) { // number of random initializations to apply
-          CitibikeExperiment ce = new CitibikeExperiment("citibike2015_edges.tsv", teleProb);
+          CitibikeExperiment ce = new CitibikeExperiment("./data/citibike2015_edges.tsv", teleProb);
           ce.setVerbose(false);
           ce.learnWeights(ri, false);
-          ce.readChoiceRankParams("citibike2015.params");
+          ce.readChoiceRankParams("./data/citibike2015.params");
 
           Random r = new Random(1);
 
@@ -100,18 +100,17 @@ public class CitibikeExperiment extends AbstractExperiment {
             int counter = 0;
             for (int n = 0; n < ce.g.getNumOfNodes(); ++n) {
               int[] ns = ce.g.getOutLinks(n);
-              if (ns[0] == 0) {
-                continue;
-              }
-              counter++;
+              if (ns[0] > 1) {
+                counter++;
 
-              if (mode.equals("prlearn") || (teleProb == 0.01 && ri == 5)) {
-                double[] nodeEvals = ce.evaluateNode(n, ce.etalonTransitions.get(n), mode, r);
-                for (int e = 0; e < evals.length; ++e) {
-                  out.format("%.4f\t", nodeEvals[e]);
-                  evals[e] += nodeEvals[e];
+                if (mode.equals("prlearn") || (teleProb == 0.01 && ri == 5)) {
+                  double[] nodeEvals = ce.evaluateNode(n, ce.etalonTransitions.get(n), mode, r);
+                  for (int e = 0; e < evals.length; ++e) {
+                    out.format("%.4f\t", nodeEvals[e]);
+                    evals[e] += nodeEvals[e];
+                  }
+                  out.format("%d\t%s\t%.2f\t%d\t%d\n", ns[0], mode, teleProb, ri, n);
                 }
-                out.format("%d\t%s\t%.2f\t%d\t%d\n", ns[0], mode, teleProb, ri, n);
               }
             }
             for (int e = 0; e < evals.length; ++e) {
