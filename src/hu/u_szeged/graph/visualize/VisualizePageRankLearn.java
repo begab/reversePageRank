@@ -51,7 +51,7 @@ public class VisualizePageRankLearn {
     fw.write(String.format("The original (i.e. uniformly weighted) transition matrix:\n%s\n", originalMtx));
     System.err.println(String.format("The original (i.e. uniformly weighted) transition matrix:\n%s\n", originalMtx));
 
-    PRWeightLearner pwl = new SoftmaxPRWeightLearner(prStar, g, .0d);
+    PRWeightLearner pwl = new SoftmaxPRWeightLearner(prStar, g);
     pwl.setRegularization(0d, PRWeightLearner.RegularizationType.NONE);
 
     Graph graph = new SingleGraph("PageRankLearn");

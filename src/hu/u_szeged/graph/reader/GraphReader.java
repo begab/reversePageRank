@@ -43,7 +43,7 @@ public class GraphReader {
       String label = n.getAttribute("label");
       Double etalonNodeWeight = 1d;
       if (n.hasAttribute("weight")) {
-        etalonNodeWeight = Double.parseDouble(n.getAttribute("weight"));
+        etalonNodeWeight = n.getNumber("weight");
       } else {
         etalonNodeWeight = rnd.nextDouble();
         warning = true;
@@ -75,7 +75,7 @@ public class GraphReader {
   }
 
   public static void main(String[] args) {
-    String inputGraphFile = "./data/airlines-sample.gexf";
+    String inputGraphFile = "./data/sample.gexf";
     String outputFile = "output.log";
 
     if (args.length > 0) {
@@ -89,8 +89,8 @@ public class GraphReader {
 
     double[] res = pr.learnEdgeWeights();
 
-    System.err.format("The initial objective value improved from %f to %f\n" + "The predicted edge transition probabilities were written into file %s.", res[0],
-        res[1], outputFile);
+    System.err.format("The initial objective value improved from %f to %f\n" + "The predicted edge transition probabilities were written into file %s.", -res[0],
+        -res[1], outputFile);
 
     g.softmaxNormalizeWeights();
     pr.extensiveLog();
