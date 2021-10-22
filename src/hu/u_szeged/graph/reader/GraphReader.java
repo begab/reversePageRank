@@ -81,10 +81,15 @@ public class GraphReader {
     if (args.length > 0) {
       inputGraphFile = args[0];
     }
+    
+    double restartProb = 0.01;
+    if (args.length > 1) {
+    	restartProb = Double.parseDouble(args[1]);
+      }
 
     OwnGraph g = GraphReader.readGraph(inputGraphFile);
 
-    PRWeightLearner pr = new SoftmaxPRWeightLearner(etalonWeights, g);
+    PRWeightLearner pr = new SoftmaxPRWeightLearner(etalonWeights, g, restartProb);
     pr.setLogFile(outputFile);
 
     double[] res = pr.learnEdgeWeights();
